@@ -1,10 +1,14 @@
 mod app;
 mod batch;
 mod config;
+mod protocol;
+mod server;
 mod tools;
+mod transport;
 
 use app::ForgeMcp;
 use config::AppConfig;
+use server::ForgeServer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -22,11 +26,8 @@ async fn main() -> anyhow::Result<()> {
         workspace = %app.workspace_root().display(),
         max_batch_items = app.max_batch_items(),
         max_concurrency = app.max_concurrency(),
-        tools = ?tools::TOOL_NAMES,
-        "starting ForgeMCP"
+        "starting ForgeMCP over stdio"
     );
 
-    // MCP stdio transport and tool handlers are wired in the next implementation step.
-    tokio::signal::ctrl_c().await?;
-    Ok(())
+    transport::stdio::serve(ForgeServer::new(app)).await
 }

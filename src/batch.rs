@@ -1,13 +1,14 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BatchRequest<T> {
     pub items: Vec<T>,
     #[serde(default)]
     pub options: BatchOptions,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct BatchOptions {
     #[serde(default)]
     pub fail_fast: bool,

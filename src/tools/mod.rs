@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const TOOL_NAMES: [&str; 10] = [
@@ -15,7 +16,7 @@ pub const TOOL_NAMES: [&str; 10] = [
     "audit_list",
 ];
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct ShellRunItem {
     pub command: String,
     pub cwd: Option<String>,
@@ -34,7 +35,7 @@ pub struct ShellRunResult {
     pub timed_out: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FileListItem {
     pub path: String,
     pub depth: Option<usize>,
@@ -58,7 +59,7 @@ pub enum FileEntryKind {
     Other,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FileReadItem {
     pub path: String,
     pub start_line: Option<usize>,
@@ -74,7 +75,7 @@ pub struct FileReadResult {
     pub content: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FileWriteItem {
     pub path: String,
     pub content: String,
@@ -83,7 +84,7 @@ pub struct FileWriteItem {
     pub create_parent_dirs: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FileWriteMode {
     Create,
@@ -91,13 +92,13 @@ pub enum FileWriteMode {
     CreateOrOverwrite,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FileEditItem {
     pub path: String,
     pub operation: FileEditOperation,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FileEditOperation {
     Replace {
@@ -113,7 +114,7 @@ pub enum FileEditOperation {
     },
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FileDeleteItem {
     pub path: String,
     #[serde(default)]
@@ -122,7 +123,7 @@ pub struct FileDeleteItem {
     pub ignore_missing: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FileSearchItem {
     pub path: String,
     pub glob: Option<String>,
@@ -140,7 +141,7 @@ pub struct FileSearchMatch {
     pub text: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FilePatchItem {
     pub patch: String,
 }
@@ -161,7 +162,7 @@ pub struct GitInfo {
     pub dirty: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default, JsonSchema)]
 pub struct AuditListRequest {
     pub limit: Option<usize>,
     pub tool: Option<String>,
