@@ -65,10 +65,7 @@ impl AppConfig {
             .map(PathBuf::from)
             .unwrap_or(std::env::current_dir()?);
         let workspace_root = fs::canonicalize(&workspace_input).with_context(|| {
-            format!(
-                "failed to resolve workspace {}",
-                workspace_input.display()
-            )
+            format!("failed to resolve workspace {}", workspace_input.display())
         })?;
         if !workspace_root.is_dir() {
             bail!(
@@ -112,10 +109,7 @@ impl AppConfig {
             max_concurrency: env_usize("FORGE_MCP_MAX_CONCURRENCY", 16)?,
             max_read_bytes: env_usize("FORGE_MCP_MAX_READ_BYTES", 1024 * 1024)?,
             max_write_bytes: env_usize("FORGE_MCP_MAX_WRITE_BYTES", 4 * 1024 * 1024)?,
-            max_shell_output_bytes: env_usize(
-                "FORGE_MCP_MAX_SHELL_OUTPUT_BYTES",
-                1024 * 1024,
-            )?,
+            max_shell_output_bytes: env_usize("FORGE_MCP_MAX_SHELL_OUTPUT_BYTES", 1024 * 1024)?,
             default_shell_timeout_ms: env_u64("FORGE_MCP_SHELL_TIMEOUT_MS", 30_000)?,
             oauth: OAuthConfig {
                 auth_mode,
