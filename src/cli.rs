@@ -140,9 +140,6 @@ mod tests {
 
     #[test]
     fn parses_stdio() {
-        assert_eq!(
-            parse_from(["stdio"]).unwrap().command,
-            Command::Stdio
-        );
+        assert_eq!(parse_from(["stdio"]).unwrap().command, Command::Stdio);
     }
 }
