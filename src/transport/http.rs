@@ -57,6 +57,7 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind((host, port)).await?;
     let local_addr = listener.local_addr()?;
     let oauth = OAuthService::new(app.oauth_config().clone())?;
+    let oauth_enabled = app.auth_mode() == AuthMode::OAuth;
 
     let state = HttpState {
         app,
@@ -86,7 +87,7 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
     info!(
         address = %local_addr,
         endpoint = %format!("http://{local_addr}/mcp"),
-        oauth = app.auth_mode() == AuthMode::OAuth,
+        oauth = oauth_enabled,
         "ForgeMCP Streamable HTTP transport listening"
     );
 
