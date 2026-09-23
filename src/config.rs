@@ -473,7 +473,7 @@ where
         Ok(value) => value
             .parse::<T>()
             .map(Some)
-            .with_context(|| format!("{name} has an invalid value")),
+            .map_err(|error| anyhow::anyhow!("{name} has an invalid value: {error}")),
         Err(_) => Ok(None),
     }
 }
