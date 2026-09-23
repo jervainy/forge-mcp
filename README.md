@@ -6,7 +6,7 @@ The runtime intentionally does **not** depend on an MCP SDK. JSON-RPC, MCP lifec
 
 ## Current protocol support
 
-The first protocol milestone implements the handshake-era MCP protocol defined by revision `2025-11-25`:
+The current milestone implements the handshake-era MCP protocol defined by revision `2025-11-25`:
 
 - JSON-RPC 2.0 request/notification/error handling
 - `initialize`
@@ -15,9 +15,13 @@ The first protocol milestone implements the handshake-era MCP protocol defined b
 - `tools/list`
 - `tools/call`
 - stdio transport
+- Streamable HTTP transport using JSON responses
+- stateful HTTP sessions via `MCP-Session-Id`
+- `MCP-Protocol-Version` validation for HTTP session requests
+- Origin validation for browser-originated HTTP requests
 - tool schemas generated from Rust request models with `schemars`
 
-The stdio transport keeps stdout protocol-clean. Logs are written to stderr.
+The HTTP transport intentionally starts with the simplest valid Streamable HTTP profile: each client message is a POST to `/mcp`, JSON-RPC requests receive `application/json`, accepted notifications receive `202 Accepted`, GET returns `405 Method Not Allowed` because server-initiated SSE is not implemented yet, and DELETE can terminate a session.
 
 ## Tool scope
 
@@ -41,10 +45,16 @@ Batch-capable tools use a common `BatchRequest<T>` shape. Read operations may ex
 ## Architecture
 
 ```text
-stdin/stdout
-    |
-    v
-transport::stdio
+                     ForgeServer
+                         ^
+              +----------+----------+
+              |                     |
+           stdio              Streamable HTTP
+              ^                     ^
+              |                     |
+         local host             remote client
+
+transport
     |
     v
 protocol::jsonrpc
@@ -65,31 +75,91 @@ The dependency direction is intentional: file, shell, workspace, batch, and audi
 
 ## Run
 
+### stdio
+
+The default remains stdio for backwards compatibility:
+
 ```bash
 FORGE_MCP_WORKSPACE=/path/to/workspace cargo run
 ```
 
-A client normally launches ForgeMCP and communicates over stdin/stdout. For learning, you can also send raw newline-delimited JSON-RPC messages manually.
+or explicitly:
 
-Example initialization:
-
-```json
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"manual-client","version":"0.1.0"}}}
+```bash
+FORGE_MCP_WORKSPACE=/path/to/workspace cargo run -- stdio
 ```
 
-Then send:
+### Streamable HTTP
 
-```json
-{"jsonrpc":"2.0","method":"notifications/initialized"}
-{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"workspace_info","arguments":{}}}
+```bash
+FORGE_MCP_WORKSPACE=/path/to/workspace \
+cargo run -- serve --host 127.0.0.1 --port 8765
+```
+
+The MCP endpoint is:
+
+```text
+http://127.0.0.1:8765/mcp
+```
+
+ForgeMCP binds to `127.0.0.1` and port `8765` by default:
+
+```bash
+cargo run -- serve
+```
+
+Binding to a non-loopback interface exposes command/file capabilities to the network. Authentication is not implemented yet, so keep the default loopback binding unless another trusted layer provides authentication and access control.
+
+## Raw HTTP example
+
+Initialize a session:
+
+```bash
+curl -i http://127.0.0.1:8765/mcp \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"manual-client","version":"0.1.0"}}}'
+```
+
+The response includes an `MCP-Session-Id` header. Use that value for later requests:
+
+```bash
+curl -i http://127.0.0.1:8765/mcp \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Session-Id: <session-id>' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+```
+
+Then call tools:
+
+```bash
+curl -i http://127.0.0.1:8765/mcp \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Session-Id: <session-id>' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+```
+
+## CLI
+
+```text
+forge-mcp [stdio]
+forge-mcp serve [--host <host>] [--port <port>]
+forge-mcp --help
 ```
 
 ## Roadmap
 
-1. JSON-RPC 2.0 + MCP 2025 handshake lifecycle + stdio
-2. Implement the ten workspace tools and common batch executor
-3. Workspace security, limits, and audit persistence
-4. Streamable HTTP
-5. MCP `2026-07-28` stateless lifecycle and `server/discover`
-6. Cross-check compatibility with official MCP SDK clients
+1. JSON-RPC 2.0 + MCP 2025 handshake lifecycle
+2. stdio + Streamable HTTP
+3. Implement the ten workspace tools and common batch executor
+4. Workspace security, limits, and audit persistence
+5. SSE/server-to-client Streamable HTTP support where needed
+6. MCP `2026-07-28` stateless lifecycle and `server/discover`
+7. Cross-check compatibility with official MCP SDK clients
