@@ -1,6 +1,4 @@
-use std::{
-    path::{Component, Path, PathBuf},
-};
+use std::path::{Component, Path, PathBuf};
 
 use crate::batch::ToolError;
 
@@ -51,9 +49,8 @@ impl WorkspaceGuard {
             })?;
         }
 
-        let resolved_ancestor = std::fs::canonicalize(ancestor).map_err(|error| {
-            ToolError::new("PATH_RESOLUTION_FAILED", error.to_string())
-        })?;
+        let resolved_ancestor = std::fs::canonicalize(ancestor)
+            .map_err(|error| ToolError::new("PATH_RESOLUTION_FAILED", error.to_string()))?;
         self.ensure_inside(&resolved_ancestor)?;
         Ok(candidate)
     }
@@ -110,7 +107,10 @@ impl WorkspaceGuard {
         } else {
             Err(ToolError::new(
                 "PATH_OUTSIDE_WORKSPACE",
-                format!("{} resolves outside the configured workspace", path.display()),
+                format!(
+                    "{} resolves outside the configured workspace",
+                    path.display()
+                ),
             ))
         }
     }
