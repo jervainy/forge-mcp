@@ -1,4 +1,5 @@
 mod app;
+mod auth;
 mod batch;
 mod cli;
 mod config;
@@ -9,7 +10,7 @@ mod transport;
 
 use app::ForgeMcp;
 use cli::Command;
-use config::AppConfig;
+use config::{AppConfig, AuthMode};
 use server::ForgeServer;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -34,17 +35,18 @@ async fn main() -> anyhow::Result<()> {
         workspace = %app.workspace_root().display(),
         max_batch_items = app.max_batch_items(),
         max_concurrency = app.max_concurrency(),
+        oauth = app.auth_mode() == AuthMode::OAuth,
         "starting ForgeMCP"
     );
 
     match command {
         Command::Stdio => transport::stdio::serve(ForgeServer::new(app)).await,
         Command::Serve { host, port } => {
-            if !is_loopback_host(&host) {
+            if !is_loopback_host(&host) && app.auth_mode() == AuthMode::None {
                 warn!(
                     host,
                     port,
-                    "ForgeMCP HTTP transport has no authentication yet; non-loopback binding exposes powerful tools to the network"
+                    "ForgeMCP is binding to a non-loopback interface with authentication disabled"
                 );
             }
 

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -7,6 +9,15 @@ pub struct Tool {
     pub name: String,
     pub description: String,
     pub input_schema: Value,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub security_schemes: Vec<SecurityScheme>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum SecurityScheme {
+    #[serde(rename = "oauth2")]
+    OAuth2 { scopes: Vec<String> },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,6 +39,8 @@ pub struct CallToolResult {
     pub content: Vec<Content>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<BTreeMap<String, Value>>,
 }
 
 impl CallToolResult {
@@ -35,6 +48,7 @@ impl CallToolResult {
         Self {
             content: vec![Content::Text { text: text.into() }],
             is_error: None,
+            meta: None,
         }
     }
 
@@ -44,6 +58,23 @@ impl CallToolResult {
                 text: message.into(),
             }],
             is_error: Some(true),
+            meta: None,
+        }
+    }
+
+    pub fn authentication_required(challenge: String) -> Self {
+        let mut meta = BTreeMap::new();
+        meta.insert(
+            "mcp/www_authenticate".to_string(),
+            Value::Array(vec![Value::String(challenge)]),
+        );
+
+        Self {
+            content: vec![Content::Text {
+                text: "Authentication requires additional OAuth permission.".to_string(),
+            }],
+            is_error: Some(true),
+            meta: Some(meta),
         }
     }
 }

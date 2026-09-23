@@ -1,6 +1,6 @@
-use crate::config::AppConfig;
+use crate::config::{AppConfig, AuthMode, OAuthConfig};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ForgeMcp {
     config: AppConfig,
 }
@@ -20,5 +20,13 @@ impl ForgeMcp {
 
     pub fn max_concurrency(&self) -> usize {
         self.config.max_concurrency
+    }
+
+    pub fn auth_mode(&self) -> AuthMode {
+        self.config.oauth.auth_mode
+    }
+
+    pub fn oauth_config(&self) -> &OAuthConfig {
+        &self.config.oauth
     }
 }

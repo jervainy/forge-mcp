@@ -5,6 +5,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     app::ForgeMcp,
+    auth::AuthContext,
     protocol::{
         jsonrpc::{
             INTERNAL_ERROR, INVALID_PARAMS, INVALID_REQUEST, JsonRpcId, JsonRpcMessage,
@@ -16,7 +17,7 @@ use crate::{
                 Implementation, InitializeParams, InitializeResult, ServerCapabilities,
                 ToolsCapability,
             },
-            tools::{CallToolParams, ListToolsResult},
+            tools::{CallToolParams, CallToolResult, ListToolsResult},
         },
     },
 };
@@ -42,6 +43,15 @@ impl ForgeServer {
     }
 
     pub async fn handle(&mut self, message: JsonRpcMessage) -> Option<JsonRpcResponse> {
+        self.handle_with_auth(message, &AuthContext::Unrestricted)
+            .await
+    }
+
+    pub async fn handle_with_auth(
+        &mut self,
+        message: JsonRpcMessage,
+        auth: &AuthContext,
+    ) -> Option<JsonRpcResponse> {
         if let Err(reason) = message.validate() {
             if message.is_notification() {
                 warn!(reason, "discarding invalid JSON-RPC notification");
@@ -60,7 +70,7 @@ impl ForgeServer {
             return None;
         }
 
-        Some(self.handle_request(message).await)
+        Some(self.handle_request(message, auth).await)
     }
 
     async fn handle_notification(&mut self, message: JsonRpcMessage) {
@@ -83,7 +93,11 @@ impl ForgeServer {
         }
     }
 
-    async fn handle_request(&mut self, message: JsonRpcMessage) -> JsonRpcResponse {
+    async fn handle_request(
+        &mut self,
+        message: JsonRpcMessage,
+        auth: &AuthContext,
+    ) -> JsonRpcResponse {
         let id = message.id.clone();
 
         match message.method.as_str() {
@@ -116,6 +130,20 @@ impl ForgeServer {
                         );
                     }
                 };
+
+                let Some(required_scopes) = ToolRegistry::required_scopes(&params.name) else {
+                    return JsonRpcResponse::error(id, INVALID_PARAMS, "Unknown tool", None);
+                };
+
+                if !auth.allows(required_scopes) {
+                    let challenge = auth.www_authenticate(required_scopes).unwrap_or_else(|| {
+                        "Bearer error=\"insufficient_scope\"".to_string()
+                    });
+                    return JsonRpcResponse::success(
+                        id,
+                        CallToolResult::authentication_required(challenge),
+                    );
+                }
 
                 match ToolRegistry::call(&self.app, params).await {
                     Some(result) => JsonRpcResponse::success(id, result),
@@ -219,11 +247,9 @@ mod tests {
     use serde_json::Number;
 
     fn server() -> ForgeServer {
-        ForgeServer::new(ForgeMcp::new(AppConfig {
-            workspace_root: std::env::current_dir().unwrap(),
-            max_batch_items: 100,
-            max_concurrency: 16,
-        }))
+        ForgeServer::new(ForgeMcp::new(AppConfig::test(
+            std::env::current_dir().unwrap(),
+        )))
     }
 
     fn request(id: i64, method: &str, params: Value) -> JsonRpcMessage {
@@ -277,5 +303,9 @@ mod tests {
             .unwrap();
         let value = serde_json::to_value(response).unwrap();
         assert_eq!(value["result"]["tools"].as_array().unwrap().len(), 10);
+        assert_eq!(
+            value["result"]["tools"][0]["securitySchemes"][0]["type"],
+            "oauth2"
+        );
     }
 }

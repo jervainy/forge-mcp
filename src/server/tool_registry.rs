@@ -5,7 +5,7 @@ use tokio::process::Command;
 use crate::{
     app::ForgeMcp,
     batch::BatchRequest,
-    protocol::mcp::tools::{CallToolParams, CallToolResult, Tool},
+    protocol::mcp::tools::{CallToolParams, CallToolResult, SecurityScheme, Tool},
     tools::{
         AuditListRequest, FileDeleteItem, FileEditItem, FileListItem, FilePatchItem, FileReadItem,
         FileSearchItem, FileWriteItem, GitInfo, ShellRunItem, TOOL_NAMES, WorkspaceInfo,
@@ -20,20 +20,43 @@ impl ToolRegistry {
             batch_tool::<ShellRunItem>(
                 "shell_run",
                 "Run one or more one-shot shell commands in the workspace.",
+                &["forge:execute"],
             ),
-            batch_tool::<FileListItem>("file_list", "List one or more workspace directories."),
-            batch_tool::<FileReadItem>("file_read", "Read ranges from one or more text files."),
-            batch_tool::<FileWriteItem>("file_write", "Create or overwrite one or more files."),
+            batch_tool::<FileListItem>(
+                "file_list",
+                "List one or more workspace directories.",
+                &["forge:read"],
+            ),
+            batch_tool::<FileReadItem>(
+                "file_read",
+                "Read ranges from one or more text files.",
+                &["forge:read"],
+            ),
+            batch_tool::<FileWriteItem>(
+                "file_write",
+                "Create or overwrite one or more files.",
+                &["forge:write"],
+            ),
             batch_tool::<FileEditItem>(
                 "file_edit",
                 "Apply string or line-range edits to one or more files.",
+                &["forge:write"],
             ),
-            batch_tool::<FileDeleteItem>("file_delete", "Delete one or more files or directories."),
+            batch_tool::<FileDeleteItem>(
+                "file_delete",
+                "Delete one or more files or directories.",
+                &["forge:write"],
+            ),
             batch_tool::<FileSearchItem>(
                 "file_search",
                 "Search workspace file names and text content.",
+                &["forge:read"],
             ),
-            batch_tool::<FilePatchItem>("file_patch", "Apply one or more unified diffs in order."),
+            batch_tool::<FilePatchItem>(
+                "file_patch",
+                "Apply one or more unified diffs in order.",
+                &["forge:write"],
+            ),
             Tool {
                 name: "workspace_info".to_string(),
                 description: "Return workspace, platform, shell, and Git information.".to_string(),
@@ -41,13 +64,25 @@ impl ToolRegistry {
                     "type": "object",
                     "additionalProperties": false
                 }),
+                security_schemes: oauth(&["forge:read"]),
             },
             Tool {
                 name: "audit_list".to_string(),
                 description: "List recent ForgeMCP audit records.".to_string(),
                 input_schema: schema::<AuditListRequest>(),
+                security_schemes: oauth(&["forge:audit"]),
             },
         ]
+    }
+
+    pub fn required_scopes(name: &str) -> Option<&'static [&'static str]> {
+        match name {
+            "shell_run" => Some(&["forge:execute"]),
+            "file_list" | "file_read" | "file_search" | "workspace_info" => Some(&["forge:read"]),
+            "file_write" | "file_edit" | "file_delete" | "file_patch" => Some(&["forge:write"]),
+            "audit_list" => Some(&["forge:audit"]),
+            _ => None,
+        }
     }
 
     pub async fn call(app: &ForgeMcp, params: CallToolParams) -> Option<CallToolResult> {
@@ -66,7 +101,7 @@ impl ToolRegistry {
     }
 }
 
-fn batch_tool<T>(name: &str, description: &str) -> Tool
+fn batch_tool<T>(name: &str, description: &str, scopes: &[&str]) -> Tool
 where
     T: JsonSchema,
 {
@@ -74,7 +109,14 @@ where
         name: name.to_string(),
         description: description.to_string(),
         input_schema: schema::<BatchRequest<T>>(),
+        security_schemes: oauth(scopes),
     }
+}
+
+fn oauth(scopes: &[&str]) -> Vec<SecurityScheme> {
+    vec![SecurityScheme::OAuth2 {
+        scopes: scopes.iter().map(|scope| (*scope).to_string()).collect(),
+    }]
 }
 
 fn schema<T>() -> Value
