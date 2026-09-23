@@ -45,7 +45,10 @@ pub async fn list(app: &ForgeMcp, item: FileListItem) -> Result<Vec<FileEntry>, 
             .max_depth(depth)
         {
             let entry = entry.map_err(|error| {
-                ToolError::new("FILE_LIST_FAILED", format!("directory walk failed: {error}"))
+                ToolError::new(
+                    "FILE_LIST_FAILED",
+                    format!("directory walk failed: {error}"),
+                )
             })?;
 
             if !include_hidden && is_hidden(entry.path(), &root) {
@@ -104,9 +107,8 @@ pub async fn read(app: &ForgeMcp, item: FileReadItem) -> Result<FileReadResult, 
     let bytes = fs::read(&path)
         .await
         .map_err(|error| ToolError::new("FILE_READ_FAILED", error.to_string()))?;
-    let text = String::from_utf8(bytes).map_err(|_| {
-        ToolError::new("NOT_UTF8", "file_read currently supports UTF-8 text files")
-    })?;
+    let text = String::from_utf8(bytes)
+        .map_err(|_| ToolError::new("NOT_UTF8", "file_read currently supports UTF-8 text files"))?;
 
     let start_line = item.start_line.unwrap_or(1);
     if start_line == 0 {
@@ -127,7 +129,11 @@ pub async fn read(app: &ForgeMcp, item: FileReadItem) -> Result<FileReadResult, 
     Ok(FileReadResult {
         path: app.workspace().display_path(&path),
         start_line,
-        end_line: if end_index > start_index { end_index } else { 0 },
+        end_line: if end_index > start_index {
+            end_index
+        } else {
+            0
+        },
         total_lines,
         content,
         truncated,
@@ -148,7 +154,10 @@ pub async fn write(app: &ForgeMcp, item: FileWriteItem) -> Result<FileWriteResul
 
     let path = app.workspace().resolve_target(&item.path)?;
     if app.workspace().is_root(&path) {
-        return Err(ToolError::new("INVALID_TARGET", "cannot overwrite workspace root"));
+        return Err(ToolError::new(
+            "INVALID_TARGET",
+            "cannot overwrite workspace root",
+        ));
     }
 
     let existed = path.exists();
@@ -244,7 +253,10 @@ pub async fn edit(app: &ForgeMcp, item: FileEditItem) -> Result<FileEditResult, 
             }
 
             let trailing_newline = original.ends_with('\n');
-            let mut lines = original.lines().map(ToString::to_string).collect::<Vec<_>>();
+            let mut lines = original
+                .lines()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
             if end_line > lines.len() {
                 return Err(ToolError::new(
                     "INVALID_RANGE",
@@ -417,13 +429,11 @@ pub async fn search(
 }
 
 fn is_hidden(path: &Path, root: &Path) -> bool {
-    path.strip_prefix(root)
-        .ok()
-        .is_some_and(|relative| {
-            relative
-                .components()
-                .any(|component| component.as_os_str().to_string_lossy().starts_with('.'))
-        })
+    path.strip_prefix(root).ok().is_some_and(|relative| {
+        relative
+            .components()
+            .any(|component| component.as_os_str().to_string_lossy().starts_with('.'))
+    })
 }
 
 fn build_glob(value: Option<&str>) -> Result<Option<GlobMatcher>, ToolError> {
@@ -438,27 +448,13 @@ fn build_glob(value: Option<&str>) -> Result<Option<GlobMatcher>, ToolError> {
         .transpose()
 }
 
-enum TextMatcher {
-    Regex(Regex),
-    Literal {
-        needle: String,
-        case_sensitive: bool,
-    },
+struct TextMatcher {
+    regex: Regex,
 }
 
 impl TextMatcher {
     fn find_column(&self, line: &str) -> Option<usize> {
-        let byte_index = match self {
-            Self::Regex(regex) => regex.find(line)?.start(),
-            Self::Literal {
-                needle,
-                case_sensitive: true,
-            } => line.find(needle)?,
-            Self::Literal {
-                needle,
-                case_sensitive: false,
-            } => line.to_lowercase().find(needle)?,
-        };
+        let byte_index = self.regex.find(line)?.start();
         Some(line[..byte_index].chars().count() + 1)
     }
 }
@@ -472,23 +468,17 @@ fn build_matcher(
         return Ok(None);
     };
 
-    if regex {
-        RegexBuilder::new(pattern)
-            .case_insensitive(!case_sensitive)
-            .build()
-            .map(TextMatcher::Regex)
-            .map(Some)
-            .map_err(|error| ToolError::new("INVALID_REGEX", error.to_string()))
+    let expression = if regex {
+        pattern.to_string()
     } else {
-        Ok(Some(TextMatcher::Literal {
-            needle: if case_sensitive {
-                pattern.to_string()
-            } else {
-                pattern.to_lowercase()
-            },
-            case_sensitive,
-        }))
-    }
+        regex::escape(pattern)
+    };
+
+    RegexBuilder::new(&expression)
+        .case_insensitive(!case_sensitive)
+        .build()
+        .map(|regex| Some(TextMatcher { regex }))
+        .map_err(|error| ToolError::new("INVALID_REGEX", error.to_string()))
 }
 
 fn truncate_utf8(mut value: String, limit: usize) -> (String, bool) {
