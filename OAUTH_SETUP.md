@@ -16,6 +16,33 @@ When OAuth is enabled, ForgeMCP publishes:
 
 ## Configuration
 
+OAuth is the default HTTP authentication mode. Settings may come from YAML or `FORGE_MCP_*` environment variables. Precedence is:
+
+```text
+defaults < YAML < environment < CLI
+```
+
+For example:
+
+```yaml
+mode: serve
+host: 127.0.0.1
+port: 8765
+auth_mode: oauth
+auth_bypass_localhost: true
+public_base_url: https://forge.example.com
+oauth_access_token_ttl_s: 0
+oauth_code_ttl_s: 300
+```
+
+Run it with:
+
+```bash
+forge-mcp --config /path/to/config.yaml
+```
+
+or set `FORGE_MCP_CONFIG`. Keep the Admin PIN and JWT secret in environment variables when practical.
+
 OAuth is the default HTTP authentication mode. Direct localhost requests are bypassed by default for development, but a request that arrived through a reverse proxy/tunnel does not inherit that bypass.
 
 For a public ChatGPT endpoint, configure at least:

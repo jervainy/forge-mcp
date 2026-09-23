@@ -1,6 +1,6 @@
 use crate::{
     audit::AuditLog,
-    config::{AppConfig, AuthMode, OAuthConfig},
+    config::{AppConfig, AuthMode, OAuthConfig, RunMode},
     workspace::WorkspaceGuard,
 };
 
@@ -20,6 +20,22 @@ impl ForgeMcp {
             workspace,
             audit,
         }
+    }
+
+    pub fn run_mode(&self) -> RunMode {
+        self.config.mode
+    }
+
+    pub fn serve_host(&self) -> &str {
+        &self.config.host
+    }
+
+    pub fn serve_port(&self) -> u16 {
+        self.config.port
+    }
+
+    pub fn config_path(&self) -> Option<&std::path::Path> {
+        self.config.config_path.as_deref()
     }
 
     pub fn workspace_root(&self) -> &std::path::Path {

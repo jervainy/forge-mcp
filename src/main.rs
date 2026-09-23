@@ -13,7 +13,7 @@ mod workspace;
 
 use app::ForgeMcp;
 use cli::Command;
-use config::{AppConfig, AuthMode};
+use config::{AppConfig, AuthMode, ConfigOverrides, RunMode};
 use server::ForgeServer;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -25,16 +25,32 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    let command = cli::parse()?;
-    if command == Command::Help {
+    let cli = cli::parse()?;
+    if cli.command == Command::Help {
         println!("{}", cli::usage());
         return Ok(());
     }
 
-    let config = AppConfig::from_env()?;
+    let overrides = match &cli.command {
+        Command::Auto => ConfigOverrides::default(),
+        Command::Stdio => ConfigOverrides {
+            mode: Some(RunMode::Stdio),
+            ..ConfigOverrides::default()
+        },
+        Command::Serve { host, port } => ConfigOverrides {
+            mode: Some(RunMode::Serve),
+            host: host.clone(),
+            port: *port,
+        },
+        Command::Help => unreachable!(),
+    };
+
+    let config = AppConfig::load(cli.config.as_deref(), overrides)?;
     let app = ForgeMcp::new(config);
 
     info!(
+        config = ?app.config_path().map(|path| path.display().to_string()),
+        mode = ?app.run_mode(),
         workspace = %app.workspace_root().display(),
         max_batch_items = app.max_batch_items(),
         max_concurrency = app.max_concurrency(),
@@ -42,9 +58,12 @@ async fn main() -> anyhow::Result<()> {
         "starting ForgeMCP"
     );
 
-    match command {
-        Command::Stdio => transport::stdio::serve(ForgeServer::new(app)).await,
-        Command::Serve { host, port } => {
+    match app.run_mode() {
+        RunMode::Stdio => transport::stdio::serve(ForgeServer::new(app)).await,
+        RunMode::Serve => {
+            let host = app.serve_host().to_string();
+            let port = app.serve_port();
+
             if !is_loopback_host(&host) && app.auth_mode() == AuthMode::None {
                 warn!(
                     host,
@@ -55,7 +74,6 @@ async fn main() -> anyhow::Result<()> {
 
             transport::http::serve(app, &host, port).await
         }
-        Command::Help => Ok(()),
     }
 }
 

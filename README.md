@@ -85,6 +85,66 @@ ToolRegistry
 
 File, shell, workspace, batch, and audit code do not depend on the OAuth or MCP transport implementation.
 
+## Configuration
+
+ForgeMCP supports an optional YAML configuration file, following the same precedence model as local-shell-mcp:
+
+```text
+built-in defaults
+    <
+YAML selected by --config or FORGE_MCP_CONFIG
+    <
+FORGE_MCP_* environment variables
+    <
+CLI command/flags
+```
+
+Start from [`forge-mcp.example.yaml`](forge-mcp.example.yaml):
+
+```bash
+cp forge-mcp.example.yaml ~/.config/forge-mcp/config.yaml
+forge-mcp --config ~/.config/forge-mcp/config.yaml
+```
+
+The same file can be selected with an environment variable:
+
+```bash
+export FORGE_MCP_CONFIG=~/.config/forge-mcp/config.yaml
+forge-mcp
+```
+
+A minimal HTTP configuration is:
+
+```yaml
+mode: serve
+host: 127.0.0.1
+port: 8765
+workspace_root: /path/to/workspace
+
+auth_mode: oauth
+auth_bypass_localhost: true
+public_base_url: https://forge.example.com
+
+max_batch_items: 100
+max_concurrency: 16
+```
+
+For secrets such as `oauth_admin_pin` and `oauth_jwt_secret`, prefer environment variables even though YAML accepts the fields.
+
+Important environment aliases:
+
+```text
+FORGE_MCP_CONFIG
+FORGE_MCP_MODE
+FORGE_MCP_HOST
+FORGE_MCP_PORT
+FORGE_MCP_WORKSPACE_ROOT
+FORGE_MCP_WORKSPACE          # legacy alias
+FORGE_MCP_STATE_DIR
+```
+
+`mode: stdio` selects stdio. `mode: serve`, `mode: http`, and `mode: mcp` select Streamable HTTP.
+
 ## Run
 
 ### stdio
@@ -93,11 +153,19 @@ File, shell, workspace, batch, and audit code do not depend on the OAuth or MCP 
 FORGE_MCP_WORKSPACE=/path/to/workspace cargo run -- stdio
 ```
 
-The default command remains stdio:
+With no command and no configured `mode`, the default remains stdio:
 
 ```bash
 cargo run
 ```
+
+If a YAML file sets `mode: serve`, this is enough:
+
+```bash
+cargo run -- --config ~/.config/forge-mcp/config.yaml
+```
+
+An explicit `stdio` or `serve` command overrides the YAML/environment mode.
 
 ### Streamable HTTP
 
@@ -142,10 +210,13 @@ OAuth client registrations and the generated JWT signing secret are persisted in
 ## CLI
 
 ```text
-forge-mcp [stdio]
-forge-mcp serve [--host <host>] [--port <port>]
+forge-mcp [--config <path>]
+forge-mcp [--config <path>] stdio
+forge-mcp [--config <path>] serve [--host <host>] [--port <port>]
 forge-mcp --help
 ```
+
+`--config` may also appear after `serve`, for example `forge-mcp serve --config forge.yaml --port 9000`.
 
 ## Runtime behavior
 

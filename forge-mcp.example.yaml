@@ -1,0 +1,50 @@
+# ForgeMCP YAML configuration.
+#
+# Precedence:
+#   built-in defaults < this YAML < FORGE_MCP_* environment variables < CLI flags
+#
+# Select the file with either:
+#   forge-mcp --config /path/to/config.yaml
+# or:
+#   FORGE_MCP_CONFIG=/path/to/config.yaml forge-mcp
+
+# "stdio" starts the stdio transport.
+# "serve", "http", and "mcp" start Streamable HTTP.
+mode: serve
+
+host: 127.0.0.1
+port: 8765
+
+# Defaults to the process current directory when omitted.
+# workspace_root: /path/to/workspace
+
+# Defaults to ~/.config/forge-mcp (or $XDG_CONFIG_HOME/forge-mcp).
+# state_dir: ~/.config/forge-mcp
+
+max_batch_items: 100
+max_concurrency: 16
+max_read_bytes: 1048576
+max_write_bytes: 4194304
+max_shell_output_bytes: 1048576
+shell_timeout_ms: 30000
+
+auth_mode: oauth
+auth_bypass_localhost: true
+
+# Required for a public ChatGPT endpoint. Must be HTTPS outside loopback.
+# public_base_url: https://forge.example.com
+
+# Usually leave these unset so they inherit public_base_url/request origin.
+# oauth_issuer: https://forge.example.com
+# oauth_resource: https://forge.example.com
+
+# Prefer environment variables for secrets:
+#   FORGE_MCP_OAUTH_ADMIN_PIN
+#   FORGE_MCP_OAUTH_JWT_SECRET
+#
+# oauth_admin_pin: replace-with-a-long-random-pin
+# oauth_jwt_secret: replace-with-at-least-32-random-bytes
+
+# 0 means access tokens do not automatically expire.
+oauth_access_token_ttl_s: 0
+oauth_code_ttl_s: 300
