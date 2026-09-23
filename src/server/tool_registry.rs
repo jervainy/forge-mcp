@@ -6,9 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     app::ForgeMcp,
-    batch::{
-        BatchRequest, ToolError, execute_read_batch, execute_write_batch,
-    },
+    batch::{BatchRequest, ToolError, execute_read_batch, execute_write_batch},
     protocol::mcp::tools::{CallToolParams, CallToolResult, SecurityScheme, Tool},
     runtime::{filesystem, patch, shell},
     tools::{
@@ -328,10 +326,7 @@ async fn audit_result<T>(
     target: Option<String>,
     result: &Result<T, ToolError>,
 ) {
-    let audit_result = result
-        .as_ref()
-        .map(|_| ())
-        .map_err(|error| error.clone());
+    let audit_result = result.as_ref().map(|_| ()).map_err(|error| error.clone());
     app.audit()
         .record(batch_id, tool, index, target, &audit_result)
         .await;
@@ -355,9 +350,7 @@ where
 {
     match serde_json::to_string_pretty(&value) {
         Ok(text) => CallToolResult::text(text),
-        Err(error) => CallToolResult::tool_error(format!(
-            "RESULT_SERIALIZATION_FAILED: {error}"
-        )),
+        Err(error) => CallToolResult::tool_error(format!("RESULT_SERIALIZATION_FAILED: {error}")),
     }
 }
 
