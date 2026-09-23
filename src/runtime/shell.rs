@@ -51,7 +51,10 @@ pub async fn run(app: &ForgeMcp, item: ShellRunItem) -> Result<ShellRunResult, T
 
     let started = Instant::now();
     let mut child = command.spawn().map_err(|error| {
-        ToolError::new("SHELL_SPAWN_FAILED", format!("failed to start command: {error}"))
+        ToolError::new(
+            "SHELL_SPAWN_FAILED",
+            format!("failed to start command: {error}"),
+        )
     })?;
 
     let stdout = child
@@ -70,7 +73,10 @@ pub async fn run(app: &ForgeMcp, item: ShellRunItem) -> Result<ShellRunResult, T
     let (status, timed_out) = match timeout(Duration::from_millis(timeout_ms), child.wait()).await {
         Ok(result) => (
             result.map_err(|error| {
-                ToolError::new("SHELL_WAIT_FAILED", format!("failed waiting for command: {error}"))
+                ToolError::new(
+                    "SHELL_WAIT_FAILED",
+                    format!("failed waiting for command: {error}"),
+                )
             })?,
             false,
         ),
@@ -123,17 +129,10 @@ fn shell_command(command: &str) -> Command {
     process
 }
 
-fn apply_env(
-    command: &mut Command,
-    env: Option<HashMap<String, String>>,
-) -> Result<(), ToolError> {
+fn apply_env(command: &mut Command, env: Option<HashMap<String, String>>) -> Result<(), ToolError> {
     if let Some(env) = env {
         for (key, value) in env {
-            if key.is_empty()
-                || key.contains('=')
-                || key.contains('\0')
-                || value.contains('\0')
-            {
+            if key.is_empty() || key.contains('=') || key.contains('\0') || value.contains('\0') {
                 return Err(ToolError::new(
                     "INVALID_ENV",
                     format!("invalid environment variable name: {key:?}"),
