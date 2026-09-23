@@ -19,7 +19,7 @@ use uuid::Uuid;
 use crate::{
     app::ForgeMcp,
     protocol::{
-        jsonrpc::{INVALID_REQUEST, JsonRpcMessage, JsonRpcResponse},
+        jsonrpc::{JsonRpcMessage, JsonRpcResponse},
         mcp::PROTOCOL_VERSION,
     },
     server::ForgeServer,
@@ -48,10 +48,7 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
     };
 
     let router = Router::new()
-        .route(
-            "/mcp",
-            post(post_mcp).get(get_mcp).delete(delete_mcp),
-        )
+        .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
         .with_state(state);
 
     info!(
@@ -64,11 +61,7 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn post_mcp(
-    State(state): State<HttpState>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Response {
+async fn post_mcp(State(state): State<HttpState>, headers: HeaderMap, body: Bytes) -> Response {
     if let Err(response) = validate_origin(&state, &headers) {
         return response;
     }
@@ -103,7 +96,9 @@ async fn post_mcp(
 
         return json_rpc_response(
             StatusCode::BAD_REQUEST,
-            JsonRpcResponse::invalid_request("message must be a request, notification, or response"),
+            JsonRpcResponse::invalid_request(
+                "message must be a request, notification, or response",
+            ),
             None,
         );
     }
@@ -212,10 +207,7 @@ async fn initialize_session(
     json_rpc_response(StatusCode::OK, response, Some(&session_id))
 }
 
-async fn get_mcp(
-    State(state): State<HttpState>,
-    headers: HeaderMap,
-) -> Response {
+async fn get_mcp(State(state): State<HttpState>, headers: HeaderMap) -> Response {
     if let Err(response) = validate_origin(&state, &headers) {
         return response;
     }
@@ -227,10 +219,7 @@ async fn get_mcp(
     response
 }
 
-async fn delete_mcp(
-    State(state): State<HttpState>,
-    headers: HeaderMap,
-) -> Response {
+async fn delete_mcp(State(state): State<HttpState>, headers: HeaderMap) -> Response {
     if let Err(response) = validate_origin(&state, &headers) {
         return response;
     }
@@ -297,10 +286,7 @@ fn validate_origin(state: &HttpState, headers: &HeaderMap) -> Result<(), Respons
     }
 }
 
-fn required_header<'a>(
-    headers: &'a HeaderMap,
-    name: &str,
-) -> Result<&'a str, Response> {
+fn required_header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, Response> {
     optional_header(headers, name).ok_or_else(|| {
         plain_response(
             StatusCode::BAD_REQUEST,
@@ -394,10 +380,7 @@ mod tests {
     #[test]
     fn allows_loopback_origin() {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            ORIGIN,
-            HeaderValue::from_static("http://localhost:8765"),
-        );
+        headers.insert(ORIGIN, HeaderValue::from_static("http://localhost:8765"));
 
         assert!(validate_origin(&state(), &headers).is_ok());
     }

@@ -7,9 +7,8 @@ use crate::{
     batch::BatchRequest,
     protocol::mcp::tools::{CallToolParams, CallToolResult, Tool},
     tools::{
-        AuditListRequest, FileDeleteItem, FileEditItem, FileListItem, FilePatchItem,
-        FileReadItem, FileSearchItem, FileWriteItem, GitInfo, ShellRunItem, TOOL_NAMES,
-        WorkspaceInfo,
+        AuditListRequest, FileDeleteItem, FileEditItem, FileListItem, FilePatchItem, FileReadItem,
+        FileSearchItem, FileWriteItem, GitInfo, ShellRunItem, TOOL_NAMES, WorkspaceInfo,
     },
 };
 
@@ -22,34 +21,19 @@ impl ToolRegistry {
                 "shell_run",
                 "Run one or more one-shot shell commands in the workspace.",
             ),
-            batch_tool::<FileListItem>(
-                "file_list",
-                "List one or more workspace directories.",
-            ),
-            batch_tool::<FileReadItem>(
-                "file_read",
-                "Read ranges from one or more text files.",
-            ),
-            batch_tool::<FileWriteItem>(
-                "file_write",
-                "Create or overwrite one or more files.",
-            ),
+            batch_tool::<FileListItem>("file_list", "List one or more workspace directories."),
+            batch_tool::<FileReadItem>("file_read", "Read ranges from one or more text files."),
+            batch_tool::<FileWriteItem>("file_write", "Create or overwrite one or more files."),
             batch_tool::<FileEditItem>(
                 "file_edit",
                 "Apply string or line-range edits to one or more files.",
             ),
-            batch_tool::<FileDeleteItem>(
-                "file_delete",
-                "Delete one or more files or directories.",
-            ),
+            batch_tool::<FileDeleteItem>("file_delete", "Delete one or more files or directories."),
             batch_tool::<FileSearchItem>(
                 "file_search",
                 "Search workspace file names and text content.",
             ),
-            batch_tool::<FilePatchItem>(
-                "file_patch",
-                "Apply one or more unified diffs in order.",
-            ),
+            batch_tool::<FilePatchItem>("file_patch", "Apply one or more unified diffs in order."),
             Tool {
                 name: "workspace_info".to_string(),
                 description: "Return workspace, platform, shell, and Git information.".to_string(),

@@ -35,14 +35,10 @@ where
             while let Some(argument) = args.next() {
                 match argument.as_str() {
                     "--host" => {
-                        host = args
-                            .next()
-                            .context("--host requires a value")?;
+                        host = args.next().context("--host requires a value")?;
                     }
                     "--port" => {
-                        let value = args
-                            .next()
-                            .context("--port requires a value")?;
+                        let value = args.next().context("--port requires a value")?;
                         port = value
                             .parse::<u16>()
                             .with_context(|| format!("invalid port: {value}"))?;

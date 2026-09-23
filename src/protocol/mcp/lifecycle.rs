@@ -21,8 +21,7 @@ impl Implementation {
             version: env!("CARGO_PKG_VERSION").to_string(),
             title: Some("ForgeMCP".to_string()),
             description: Some(
-                "Workspace-scoped shell and file tools implemented without an MCP SDK"
-                    .to_string(),
+                "Workspace-scoped shell and file tools implemented without an MCP SDK".to_string(),
             ),
             website_url: Some("https://github.com/jervainy/forge-mcp".to_string()),
         }

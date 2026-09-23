@@ -1,8 +1,6 @@
 use anyhow::Context;
 use serde_json::Value;
-use tokio::io::{
-    AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter,
-};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
 use crate::{
     protocol::jsonrpc::{JsonRpcMessage, JsonRpcResponse},
@@ -26,8 +24,8 @@ pub async fn serve(mut server: ForgeServer) -> anyhow::Result<()> {
         };
 
         if let Some(response) = response {
-            let encoded = serde_json::to_vec(&response)
-                .context("failed to serialize JSON-RPC response")?;
+            let encoded =
+                serde_json::to_vec(&response).context("failed to serialize JSON-RPC response")?;
             writer.write_all(&encoded).await?;
             writer.write_all(b"\n").await?;
             writer.flush().await?;

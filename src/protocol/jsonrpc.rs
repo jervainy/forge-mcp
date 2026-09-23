@@ -24,11 +24,7 @@ impl JsonRpcId {
     }
 
     pub fn response_id(self) -> Self {
-        if self.is_missing() {
-            Self::Null
-        } else {
-            self
-        }
+        if self.is_missing() { Self::Null } else { self }
     }
 }
 
@@ -125,8 +121,8 @@ pub enum JsonRpcResponse {
 
 impl JsonRpcResponse {
     pub fn success(id: JsonRpcId, result: impl Serialize) -> Self {
-        let result = serde_json::to_value(result)
-            .unwrap_or_else(|_| Value::Object(Default::default()));
+        let result =
+            serde_json::to_value(result).unwrap_or_else(|_| Value::Object(Default::default()));
         Self::Success(JsonRpcSuccess {
             jsonrpc: JSONRPC_VERSION,
             id: id.response_id(),
@@ -171,22 +167,17 @@ mod tests {
 
     #[test]
     fn distinguishes_request_notification_and_null_id() {
-        let request: JsonRpcMessage = serde_json::from_str(
-            r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
-        )
-        .unwrap();
+        let request: JsonRpcMessage =
+            serde_json::from_str(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#).unwrap();
         assert!(!request.is_notification());
 
-        let notification: JsonRpcMessage = serde_json::from_str(
-            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
-        )
-        .unwrap();
+        let notification: JsonRpcMessage =
+            serde_json::from_str(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
+                .unwrap();
         assert!(notification.is_notification());
 
-        let null_id: JsonRpcMessage = serde_json::from_str(
-            r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#,
-        )
-        .unwrap();
+        let null_id: JsonRpcMessage =
+            serde_json::from_str(r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#).unwrap();
         assert!(!null_id.is_notification());
         assert_eq!(null_id.id, JsonRpcId::Null);
     }

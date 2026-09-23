@@ -119,12 +119,7 @@ impl ForgeServer {
 
                 match ToolRegistry::call(&self.app, params).await {
                     Some(result) => JsonRpcResponse::success(id, result),
-                    None => JsonRpcResponse::error(
-                        id,
-                        INVALID_PARAMS,
-                        "Unknown tool",
-                        None,
-                    ),
+                    None => JsonRpcResponse::error(id, INVALID_PARAMS, "Unknown tool", None),
                 }
             }
             _ => JsonRpcResponse::error(
@@ -136,18 +131,9 @@ impl ForgeServer {
         }
     }
 
-    fn handle_initialize(
-        &mut self,
-        id: JsonRpcId,
-        params: Option<Value>,
-    ) -> JsonRpcResponse {
+    fn handle_initialize(&mut self, id: JsonRpcId, params: Option<Value>) -> JsonRpcResponse {
         if self.session.is_some() {
-            return JsonRpcResponse::error(
-                id,
-                INVALID_REQUEST,
-                "Server already initialized",
-                None,
-            );
+            return JsonRpcResponse::error(id, INVALID_REQUEST, "Server already initialized", None);
         }
 
         let params = match decode_params::<InitializeParams>(params) {
