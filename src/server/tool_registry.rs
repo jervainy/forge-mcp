@@ -94,23 +94,18 @@ impl ToolRegistry {
         }
 
         let arguments = params.arguments.unwrap_or_else(|| json!({}));
-        let result = match params.name.as_str() {
-            "shell_run" => shell_run(app, arguments).await,
-            "file_list" => file_list(app, arguments).await,
-            "file_read" => file_read(app, arguments).await,
-            "file_write" => file_write(app, arguments).await,
-            "file_edit" => file_edit(app, arguments).await,
-            "file_delete" => file_delete(app, arguments).await,
-            "file_search" => file_search(app, arguments).await,
-            "file_patch" => file_patch(app, arguments).await,
-            "workspace_info" => workspace_info(app).await,
-            "audit_list" => audit_list(app, arguments).await,
+        Some(match params.name.as_str() {
+            "shell_run" => finish(shell_run(app, arguments).await),
+            "file_list" => finish(file_list(app, arguments).await),
+            "file_read" => finish(file_read(app, arguments).await),
+            "file_write" => finish(file_write(app, arguments).await),
+            "file_edit" => finish(file_edit(app, arguments).await),
+            "file_delete" => finish(file_delete(app, arguments).await),
+            "file_search" => finish(file_search(app, arguments).await),
+            "file_patch" => finish(file_patch(app, arguments).await),
+            "workspace_info" => finish(workspace_info(app).await),
+            "audit_list" => finish(audit_list(app, arguments).await),
             _ => unreachable!("tool name was validated"),
-        };
-
-        Some(match result {
-            Ok(value) => json_result(value),
-            Err(error) => CallToolResult::tool_error(format!("{}: {}", error.code, error.message)),
         })
     }
 }
@@ -342,6 +337,16 @@ where
             format!("tool arguments do not match the input schema: {error}"),
         )
     })
+}
+
+fn finish<T>(result: Result<T, ToolError>) -> CallToolResult
+where
+    T: Serialize,
+{
+    match result {
+        Ok(value) => json_result(value),
+        Err(error) => CallToolResult::tool_error(format!("{}: {}", error.code, error.message)),
+    }
 }
 
 fn json_result<T>(value: T) -> CallToolResult
