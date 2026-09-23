@@ -25,9 +25,7 @@ use crate::{
     app::ForgeMcp,
     auth::{
         AuthContext, OAuthService,
-        oauth::{
-            AuthorizeRequest, OAuthError, RegistrationRequest, TokenRequest,
-        },
+        oauth::{AuthorizeRequest, OAuthError, RegistrationRequest, TokenRequest},
     },
     config::AuthMode,
     protocol::{
@@ -322,10 +320,7 @@ async fn delete_mcp(
     StatusCode::NO_CONTENT.into_response()
 }
 
-async fn oauth_protected_resource(
-    State(state): State<HttpState>,
-    headers: HeaderMap,
-) -> Response {
+async fn oauth_protected_resource(State(state): State<HttpState>, headers: HeaderMap) -> Response {
     if !state.oauth.enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -337,10 +332,7 @@ async fn oauth_protected_resource(
     )
 }
 
-async fn oauth_server_metadata(
-    State(state): State<HttpState>,
-    headers: HeaderMap,
-) -> Response {
+async fn oauth_server_metadata(State(state): State<HttpState>, headers: HeaderMap) -> Response {
     if !state.oauth.enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -378,7 +370,9 @@ async fn oauth_authorize_get(
     let base = request_base_url(&state, &headers);
     let resource = state.oauth.resource(&base);
     match state.oauth.validate_authorize(&request, &resource) {
-        Ok(details) => authorization_page(&request, &details.client_name, &details.scope, None, 200),
+        Ok(details) => {
+            authorization_page(&request, &details.client_name, &details.scope, None, 200)
+        }
         Err(error) => authorization_page(
             &request,
             "OAuth client",
@@ -509,7 +503,11 @@ fn authenticate(
     let token = headers
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer ").or_else(|| value.strip_prefix("bearer ")))
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
+        })
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
@@ -534,11 +532,7 @@ fn authenticate(
         })
 }
 
-fn unauthorized_response(
-    metadata_url: &str,
-    error: &str,
-    description: &str,
-) -> Response {
+fn unauthorized_response(metadata_url: &str, error: &str, description: &str) -> Response {
     let challenge = format!(
         "Bearer resource_metadata=\"{metadata_url}\", error=\"{error}\", error_description=\"{}\", scope=\"{}\"",
         sanitize_header_value(description),
@@ -621,7 +615,9 @@ fn request_base_url(state: &HttpState, headers: &HeaderMap) -> String {
         .or_else(|| optional_header(headers, HOST.as_str()))
         .unwrap_or("127.0.0.1:8765");
 
-    format!("{scheme}://{host}").trim_end_matches('/').to_string()
+    format!("{scheme}://{host}")
+        .trim_end_matches('/')
+        .to_string()
 }
 
 fn is_direct_localhost_request(peer: SocketAddr, headers: &HeaderMap) -> bool {
@@ -654,7 +650,8 @@ fn host_header_is_loopback(headers: &HeaderMap) -> bool {
         return true;
     }
 
-    host.parse::<IpAddr>().is_ok_and(|address| address.is_loopback())
+    host.parse::<IpAddr>()
+        .is_ok_and(|address| address.is_loopback())
 }
 
 fn authorization_page(

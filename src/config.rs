@@ -102,10 +102,7 @@ impl AppConfig {
                 oauth_resource,
                 oauth_admin_pin,
                 oauth_jwt_secret,
-                oauth_access_token_ttl_s: env_u64(
-                    "FORGE_MCP_OAUTH_ACCESS_TOKEN_TTL_S",
-                    0,
-                )?,
+                oauth_access_token_ttl_s: env_u64("FORGE_MCP_OAUTH_ACCESS_TOKEN_TTL_S", 0)?,
                 oauth_code_ttl_s: env_u64("FORGE_MCP_OAUTH_CODE_TTL_S", 300)?,
                 state_dir,
             },
@@ -128,8 +125,7 @@ impl AppConfig {
                 oauth_jwt_secret: String::new(),
                 oauth_access_token_ttl_s: 0,
                 oauth_code_ttl_s: 300,
-                state_dir: std::env::temp_dir()
-                    .join(format!("forge-mcp-test-{}", Uuid::new_v4())),
+                state_dir: std::env::temp_dir().join(format!("forge-mcp-test-{}", Uuid::new_v4())),
             },
         }
     }
@@ -235,8 +231,7 @@ fn get_or_create_oauth_secret(state_dir: &Path) -> anyhow::Result<String> {
     }
 
     let secret = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-    fs::write(&path, &secret)
-        .with_context(|| format!("failed to write {}", path.display()))?;
+    fs::write(&path, &secret).with_context(|| format!("failed to write {}", path.display()))?;
 
     #[cfg(unix)]
     {

@@ -18,12 +18,8 @@ use crate::{
     config::OAuthConfig,
 };
 
-pub const ALL_OAUTH_SCOPES: [&str; 4] = [
-    "forge:read",
-    "forge:write",
-    "forge:execute",
-    "forge:audit",
-];
+pub const ALL_OAUTH_SCOPES: [&str; 4] =
+    ["forge:read", "forge:write", "forge:execute", "forge:audit"];
 
 const MAX_OAUTH_CLIENTS: usize = 256;
 const MAX_OAUTH_CODES: usize = 1024;
@@ -278,9 +274,10 @@ impl OAuthService {
         }
 
         let now = unix_time();
-        let mut state = self.state.lock().map_err(|_| {
-            OAuthError::temporarily_unavailable("OAuth state lock is unavailable")
-        })?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| OAuthError::temporarily_unavailable("OAuth state lock is unavailable"))?;
 
         if state.clients.len() >= MAX_OAUTH_CLIENTS {
             return Err(OAuthError::temporarily_unavailable(
@@ -302,11 +299,11 @@ impl OAuthService {
             approved: false,
             created_at: now,
         };
-        state.clients.insert(client.client_id.clone(), client.clone());
+        state
+            .clients
+            .insert(client.client_id.clone(), client.clone());
         persist_clients(&self.config, &state.clients).map_err(|error| {
-            OAuthError::temporarily_unavailable(format!(
-                "failed to persist OAuth client: {error}"
-            ))
+            OAuthError::temporarily_unavailable(format!("failed to persist OAuth client: {error}"))
         })?;
 
         Ok(registration_response(&client))
@@ -346,12 +343,14 @@ impl OAuthService {
             ));
         }
 
-        let state = self.state.lock().map_err(|_| {
-            OAuthError::temporarily_unavailable("OAuth state lock is unavailable")
-        })?;
-        let client = state.clients.get(&request.client_id).ok_or_else(|| {
-            OAuthError::bad_request("invalid_request", "Unknown client_id")
-        })?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| OAuthError::temporarily_unavailable("OAuth state lock is unavailable"))?;
+        let client = state
+            .clients
+            .get(&request.client_id)
+            .ok_or_else(|| OAuthError::bad_request("invalid_request", "Unknown client_id"))?;
         if !client.redirect_uris.contains(&request.redirect_uri) {
             return Err(OAuthError::bad_request(
                 "invalid_request",
@@ -381,9 +380,10 @@ impl OAuthService {
         let details = self.validate_authorize(request, expected_resource)?;
         let now = unix_time();
 
-        let mut state = self.state.lock().map_err(|_| {
-            OAuthError::temporarily_unavailable("OAuth state lock is unavailable")
-        })?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| OAuthError::temporarily_unavailable("OAuth state lock is unavailable"))?;
         prune_codes(&self.config, &mut state, now);
         prune_pin_failures(&mut state, now);
 
@@ -434,9 +434,10 @@ impl OAuthService {
             state.pin_failures.remove(source);
         }
 
-        let client = state.clients.get_mut(&request.client_id).ok_or_else(|| {
-            OAuthError::bad_request("invalid_request", "Unknown client_id")
-        })?;
+        let client = state
+            .clients
+            .get_mut(&request.client_id)
+            .ok_or_else(|| OAuthError::bad_request("invalid_request", "Unknown client_id"))?;
         client.approved = true;
 
         if state.codes.len() >= MAX_OAUTH_CODES {
@@ -464,9 +465,8 @@ impl OAuthService {
             ))
         })?;
 
-        let mut redirect = Url::parse(&request.redirect_uri).map_err(|_| {
-            OAuthError::bad_request("invalid_request", "Invalid redirect_uri")
-        })?;
+        let mut redirect = Url::parse(&request.redirect_uri)
+            .map_err(|_| OAuthError::bad_request("invalid_request", "Invalid redirect_uri"))?;
         {
             let mut query = redirect.query_pairs_mut();
             query.append_pair("code", &code);
@@ -493,9 +493,10 @@ impl OAuthService {
         }
 
         let now = unix_time();
-        let mut state = self.state.lock().map_err(|_| {
-            OAuthError::temporarily_unavailable("OAuth state lock is unavailable")
-        })?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| OAuthError::temporarily_unavailable("OAuth state lock is unavailable"))?;
         prune_codes(&self.config, &mut state, now);
 
         let code = state.codes.get(&request.code).cloned().ok_or_else(|| {
@@ -541,9 +542,7 @@ impl OAuthService {
                 .then_some(now.saturating_add(self.config.oauth_access_token_ttl_s)),
         };
         let access_token = jwt::issue(&self.config.oauth_jwt_secret, &claims).map_err(|error| {
-            OAuthError::temporarily_unavailable(format!(
-                "failed to issue access token: {error}"
-            ))
+            OAuthError::temporarily_unavailable(format!("failed to issue access token: {error}"))
         })?;
 
         Ok(TokenResponse {
@@ -665,11 +664,7 @@ fn constant_time_eq(left: &str, right: &str) -> bool {
 }
 
 fn random_token() -> String {
-    format!(
-        "{}{}",
-        Uuid::new_v4().simple(),
-        Uuid::new_v4().simple()
-    )
+    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }
 
 fn unix_time() -> u64 {
@@ -680,9 +675,9 @@ fn unix_time() -> u64 {
 }
 
 fn prune_codes(config: &OAuthConfig, state: &mut OAuthState, now: u64) {
-    state.codes.retain(|_, code| {
-        now.saturating_sub(code.created_at) <= config.oauth_code_ttl_s.max(1)
-    });
+    state
+        .codes
+        .retain(|_, code| now.saturating_sub(code.created_at) <= config.oauth_code_ttl_s.max(1));
 }
 
 fn prune_pin_failures(state: &mut OAuthState, now: u64) {

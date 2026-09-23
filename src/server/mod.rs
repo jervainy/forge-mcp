@@ -136,9 +136,9 @@ impl ForgeServer {
                 };
 
                 if !auth.allows(required_scopes) {
-                    let challenge = auth.www_authenticate(required_scopes).unwrap_or_else(|| {
-                        "Bearer error=\"insufficient_scope\"".to_string()
-                    });
+                    let challenge = auth
+                        .www_authenticate(required_scopes)
+                        .unwrap_or_else(|| "Bearer error=\"insufficient_scope\"".to_string());
                     return JsonRpcResponse::success(
                         id,
                         CallToolResult::authentication_required(challenge),
