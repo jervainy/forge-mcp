@@ -1,12 +1,15 @@
 mod app;
+mod audit;
 mod auth;
 mod batch;
 mod cli;
 mod config;
 mod protocol;
+mod runtime;
 mod server;
 mod tools;
 mod transport;
+mod workspace;
 
 use app::ForgeMcp;
 use cli::Command;

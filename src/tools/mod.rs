@@ -33,6 +33,8 @@ pub struct ShellRunResult {
     pub stderr: String,
     pub duration_ms: u128,
     pub timed_out: bool,
+    pub stdout_truncated: bool,
+    pub stderr_truncated: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -73,6 +75,7 @@ pub struct FileReadResult {
     pub end_line: usize,
     pub total_lines: usize,
     pub content: String,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -90,6 +93,13 @@ pub enum FileWriteMode {
     Create,
     Overwrite,
     CreateOrOverwrite,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FileWriteResult {
+    pub path: String,
+    pub bytes_written: usize,
+    pub created: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -114,6 +124,13 @@ pub enum FileEditOperation {
     },
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct FileEditResult {
+    pub path: String,
+    pub replacements: usize,
+    pub bytes_written: usize,
+}
+
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FileDeleteItem {
     pub path: String,
@@ -121,6 +138,12 @@ pub struct FileDeleteItem {
     pub recursive: bool,
     #[serde(default)]
     pub ignore_missing: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FileDeleteResult {
+    pub path: String,
+    pub deleted: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -144,6 +167,17 @@ pub struct FileSearchMatch {
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct FilePatchItem {
     pub patch: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FilePatchResult {
+    pub files: Vec<PatchFileResult>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PatchFileResult {
+    pub path: String,
+    pub action: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

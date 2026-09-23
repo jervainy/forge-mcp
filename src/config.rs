@@ -52,14 +52,30 @@ pub struct AppConfig {
     pub workspace_root: PathBuf,
     pub max_batch_items: usize,
     pub max_concurrency: usize,
+    pub max_read_bytes: usize,
+    pub max_write_bytes: usize,
+    pub max_shell_output_bytes: usize,
+    pub default_shell_timeout_ms: u64,
     pub oauth: OAuthConfig,
 }
 
 impl AppConfig {
     pub fn from_env() -> anyhow::Result<Self> {
-        let workspace_root = std::env::var_os("FORGE_MCP_WORKSPACE")
+        let workspace_input = std::env::var_os("FORGE_MCP_WORKSPACE")
             .map(PathBuf::from)
             .unwrap_or(std::env::current_dir()?);
+        let workspace_root = fs::canonicalize(&workspace_input).with_context(|| {
+            format!(
+                "failed to resolve workspace {}",
+                workspace_input.display()
+            )
+        })?;
+        if !workspace_root.is_dir() {
+            bail!(
+                "FORGE_MCP_WORKSPACE must be a directory: {}",
+                workspace_root.display()
+            );
+        }
 
         let auth_mode = AuthMode::from_env()?;
         let auth_bypass_localhost = env_bool("FORGE_MCP_AUTH_BYPASS_LOCALHOST", true)?;
@@ -94,6 +110,13 @@ impl AppConfig {
             workspace_root,
             max_batch_items: env_usize("FORGE_MCP_MAX_BATCH_ITEMS", 100)?,
             max_concurrency: env_usize("FORGE_MCP_MAX_CONCURRENCY", 16)?,
+            max_read_bytes: env_usize("FORGE_MCP_MAX_READ_BYTES", 1024 * 1024)?,
+            max_write_bytes: env_usize("FORGE_MCP_MAX_WRITE_BYTES", 4 * 1024 * 1024)?,
+            max_shell_output_bytes: env_usize(
+                "FORGE_MCP_MAX_SHELL_OUTPUT_BYTES",
+                1024 * 1024,
+            )?,
+            default_shell_timeout_ms: env_u64("FORGE_MCP_SHELL_TIMEOUT_MS", 30_000)?,
             oauth: OAuthConfig {
                 auth_mode,
                 auth_bypass_localhost,
@@ -111,10 +134,15 @@ impl AppConfig {
 
     #[cfg(test)]
     pub fn test(workspace_root: PathBuf) -> Self {
+        let workspace_root = fs::canonicalize(workspace_root).unwrap();
         Self {
             workspace_root,
             max_batch_items: 100,
             max_concurrency: 16,
+            max_read_bytes: 1024 * 1024,
+            max_write_bytes: 4 * 1024 * 1024,
+            max_shell_output_bytes: 1024 * 1024,
+            default_shell_timeout_ms: 30_000,
             oauth: OAuthConfig {
                 auth_mode: AuthMode::None,
                 auth_bypass_localhost: true,
@@ -214,7 +242,7 @@ fn validate_admin_pin(pin: Option<&str>) -> anyhow::Result<()> {
 
 fn validate_jwt_secret(secret: &str) -> anyhow::Result<()> {
     let weak = ["", "change-me", "dev-change-me"];
-    if secret.as_bytes().len() < 32 || weak.contains(&secret) {
+    if secret.len() < 32 || weak.contains(&secret) {
         bail!("FORGE_MCP_OAUTH_JWT_SECRET must contain at least 32 bytes of strong random data");
     }
     Ok(())
