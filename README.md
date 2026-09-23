@@ -45,7 +45,7 @@ ForgeMCP is designed around ten tools:
 9. `workspace_info`
 10. `audit_list`
 
-`workspace_info` is already executable through `tools/call`. The other tool contracts are exposed so the next milestones can implement their application/runtime behavior without changing the MCP protocol layer.
+All ten tools are executable through `tools/call`. File and shell operations are workspace-scoped, batch-aware, output-bounded, and audited.
 
 ## Architecture
 
@@ -147,13 +147,40 @@ forge-mcp serve [--host <host>] [--port <port>]
 forge-mcp --help
 ```
 
+## Runtime behavior
+
+- `shell_run`: one-shot shell commands with workspace-scoped cwd, timeout, bounded stdout/stderr, exit code, and batch concurrency.
+- `file_list`: bounded-depth directory listing without following symlinks.
+- `file_read`: line-range UTF-8 reads with output truncation metadata.
+- `file_write`: create/overwrite modes with optional parent-directory creation.
+- `file_edit`: string replacement and 1-based inclusive line-range replacement.
+- `file_delete`: file/directory deletion with recursive and ignore-missing options.
+- `file_search`: glob plus literal/regex text search with bounded result counts.
+- `file_patch`: ordered unified-diff application, including create/modify/delete/rename cases.
+- `workspace_info`: workspace/platform/shell/Git context.
+- `audit_list`: filtered recent action history from the persisted JSONL audit log.
+
+Read-oriented batches run concurrently by default. Mutation batches preserve input order. Setting `fail_fast=true` executes in order and marks later items as skipped after the first failure.
+
+All path-bearing tools pass through `WorkspaceGuard`, which rejects lexical escapes and symlink resolutions outside `FORGE_MCP_WORKSPACE`. ForgeMCP also enforces configurable limits:
+
+```bash
+FORGE_MCP_MAX_BATCH_ITEMS=100
+FORGE_MCP_MAX_CONCURRENCY=16
+FORGE_MCP_MAX_READ_BYTES=1048576
+FORGE_MCP_MAX_WRITE_BYTES=4194304
+FORGE_MCP_MAX_SHELL_OUTPUT_BYTES=1048576
+FORGE_MCP_SHELL_TIMEOUT_MS=30000
+```
+
+Audit records are stored under `FORGE_MCP_STATE_DIR` (or the default ForgeMCP config directory) in `audit.jsonl`. File contents, shell stdout/stderr, and environment-variable values are not written to audit records.
+
 ## Roadmap
 
 1. JSON-RPC 2.0 + MCP 2025 handshake lifecycle
 2. stdio + Streamable HTTP
 3. OAuth 2.1 for ChatGPT
-4. Implement the ten workspace tools and common batch executor
-5. Workspace security, limits, and audit persistence
-6. SSE/server-to-client Streamable HTTP support where needed
-7. MCP `2026-07-28` stateless lifecycle and `server/discover`
-8. Cross-check compatibility with official MCP SDK clients
+4. Ten workspace tools + batch executor + WorkspaceGuard + audit
+5. SSE/server-to-client Streamable HTTP support where needed
+6. MCP `2026-07-28` stateless lifecycle and `server/discover`
+7. Cross-check compatibility with official MCP SDK clients
