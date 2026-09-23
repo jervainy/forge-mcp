@@ -169,7 +169,10 @@ impl Settings {
         set_some(&mut self.max_concurrency, file.max_concurrency);
         set_some(&mut self.max_read_bytes, file.max_read_bytes);
         set_some(&mut self.max_write_bytes, file.max_write_bytes);
-        set_some(&mut self.max_shell_output_bytes, file.max_shell_output_bytes);
+        set_some(
+            &mut self.max_shell_output_bytes,
+            file.max_shell_output_bytes,
+        );
         set_some(&mut self.shell_timeout_ms, file.shell_timeout_ms);
         if let Some(value) = file.auth_mode {
             self.auth_mode = AuthMode::parse(&value, "YAML auth_mode")?;
@@ -284,10 +287,7 @@ impl AppConfig {
         validate_positive("max_concurrency", settings.max_concurrency)?;
         validate_positive("max_read_bytes", settings.max_read_bytes)?;
         validate_positive("max_write_bytes", settings.max_write_bytes)?;
-        validate_positive(
-            "max_shell_output_bytes",
-            settings.max_shell_output_bytes,
-        )?;
+        validate_positive("max_shell_output_bytes", settings.max_shell_output_bytes)?;
         if settings.shell_timeout_ms == 0 {
             bail!("shell_timeout_ms must be greater than zero");
         }
@@ -298,11 +298,9 @@ impl AppConfig {
             bail!("host must not be empty");
         }
 
-        let public_base_url =
-            normalize_url(settings.public_base_url, "public_base_url", true)?;
+        let public_base_url = normalize_url(settings.public_base_url, "public_base_url", true)?;
         let oauth_issuer = normalize_url(settings.oauth_issuer, "oauth_issuer", false)?;
-        let oauth_resource =
-            normalize_url(settings.oauth_resource, "oauth_resource", false)?;
+        let oauth_resource = normalize_url(settings.oauth_resource, "oauth_resource", false)?;
 
         if settings.auth_mode == AuthMode::OAuth {
             fs::create_dir_all(&settings.state_dir)
