@@ -168,11 +168,7 @@ async fn apply_file_patch(
     Ok(action)
 }
 
-fn files_result(
-    app: &ForgeMcp,
-    path: &std::path::Path,
-    action: &str,
-) -> PatchFileResult {
+fn files_result(app: &ForgeMcp, path: &std::path::Path, action: &str) -> PatchFileResult {
     PatchFileResult {
         path: app.workspace().display_path(path),
         action: action.to_string(),
@@ -262,7 +258,11 @@ fn apply_hunks(original: &str, hunks: &[Hunk]) -> Result<String, ToolError> {
         }
     }
 
-    output.extend(original_lines[cursor..].iter().map(|line| (*line).to_string()));
+    output.extend(
+        original_lines[cursor..]
+            .iter()
+            .map(|line| (*line).to_string()),
+    );
     let mut result = output.join("\n");
     if (trailing_newline || !result.is_empty()) && !result.is_empty() {
         result.push('\n');
@@ -316,9 +316,9 @@ fn parse_patch(value: &str) -> Result<Vec<ParsedFilePatch>, ToolError> {
                     continue;
                 }
 
-                let (kind, text) = line.split_at_checked(1).ok_or_else(|| {
-                    ToolError::new("INVALID_PATCH", "empty line inside hunk")
-                })?;
+                let (kind, text) = line
+                    .split_at_checked(1)
+                    .ok_or_else(|| ToolError::new("INVALID_PATCH", "empty line inside hunk"))?;
                 match kind {
                     " " => {
                         hunk_lines.push(HunkLine::Context(text.to_string()));
@@ -421,10 +421,9 @@ mod tests {
 
     #[test]
     fn applies_simple_unified_diff() {
-        let patch = parse_patch(
-            "--- a/test.txt\n+++ b/test.txt\n@@ -1,2 +1,2 @@\n hello\n-world\n+rust\n",
-        )
-        .unwrap();
+        let patch =
+            parse_patch("--- a/test.txt\n+++ b/test.txt\n@@ -1,2 +1,2 @@\n hello\n-world\n+rust\n")
+                .unwrap();
         let updated = apply_hunks("hello\nworld\n", &patch[0].hunks).unwrap();
         assert_eq!(updated, "hello\nrust\n");
     }
