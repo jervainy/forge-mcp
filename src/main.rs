@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
         RunMode::Stdio => {
             eprintln!("ForgeMCP started in stdio mode (no network IP/port)");
             transport::stdio::serve(ForgeServer::new(app)).await
-        },
+        }
         RunMode::Serve => {
             let host = app.serve_host().to_string();
             let port = app.serve_port();
@@ -80,7 +80,6 @@ async fn main() -> anyhow::Result<()> {
 fn is_loopback_host(host: &str) -> bool {
     matches!(host, "127.0.0.1" | "::1" | "localhost")
 }
-
 
 fn init_logging(level: LogLevel) {
     tracing_subscriber::fmt()
