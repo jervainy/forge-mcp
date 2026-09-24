@@ -84,6 +84,10 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
         .route("/oauth/token", post(oauth_token))
         .with_state(state);
 
+    eprintln!(
+        "ForgeMCP listening on http://{local_addr} (MCP endpoint: http://{local_addr}/mcp)"
+    );
+
     info!(
         address = %local_addr,
         endpoint = %format!("http://{local_addr}/mcp"),

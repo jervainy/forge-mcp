@@ -12,6 +12,10 @@
 # "serve", "http", and "mcp" start Streamable HTTP.
 mode: serve
 
+# ERROR / WARN / INFO / DEBUG
+# Default: INFO
+log_level: INFO
+
 host: 127.0.0.1
 port: 8765
 

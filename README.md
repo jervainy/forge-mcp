@@ -117,6 +117,7 @@ A minimal HTTP configuration is:
 
 ```yaml
 mode: serve
+log_level: INFO
 host: 127.0.0.1
 port: 8765
 workspace_root: /path/to/workspace
@@ -136,6 +137,7 @@ Important environment aliases:
 ```text
 FORGE_MCP_CONFIG
 FORGE_MCP_MODE
+FORGE_MCP_LOG_LEVEL
 FORGE_MCP_HOST
 FORGE_MCP_PORT
 FORGE_MCP_WORKSPACE_ROOT
@@ -144,6 +146,8 @@ FORGE_MCP_STATE_DIR
 ```
 
 `mode: stdio` selects stdio. `mode: serve`, `mode: http`, and `mode: mcp` select Streamable HTTP.
+
+`log_level` supports `ERROR`, `WARN`, `INFO`, and `DEBUG`; the default is `INFO`. The same setting can be overridden with `FORGE_MCP_LOG_LEVEL`. After the HTTP listener is successfully bound, ForgeMCP always prints the actual listening IP/port and MCP endpoint to stderr, even when `log_level: ERROR` is configured.
 
 ## Run
 

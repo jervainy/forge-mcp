@@ -1,6 +1,6 @@
 use crate::{
     audit::AuditLog,
-    config::{AppConfig, AuthMode, OAuthConfig, RunMode},
+    config::{AppConfig, AuthMode, LogLevel, OAuthConfig, RunMode},
     workspace::WorkspaceGuard,
 };
 
@@ -24,6 +24,10 @@ impl ForgeMcp {
 
     pub fn run_mode(&self) -> RunMode {
         self.config.mode
+    }
+
+    pub fn log_level(&self) -> LogLevel {
+        self.config.log_level
     }
 
     pub fn serve_host(&self) -> &str {

@@ -25,6 +25,37 @@ impl RunMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+}
+
+impl LogLevel {
+    fn parse(value: &str, source: &str) -> anyhow::Result<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "error" => Ok(Self::Error),
+            "warn" => Ok(Self::Warn),
+            "info" => Ok(Self::Info),
+            "debug" => Ok(Self::Debug),
+            value => bail!(
+                "{source} has unsupported log_level: {value}; expected ERROR, WARN, INFO, or DEBUG"
+            ),
+        }
+    }
+
+    pub fn as_filter(&self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthMode {
     None,
     OAuth,
@@ -70,6 +101,7 @@ impl OAuthConfig {
 #[derive(Clone)]
 pub struct AppConfig {
     pub mode: RunMode,
+    pub log_level: LogLevel,
     pub host: String,
     pub port: u16,
     pub config_path: Option<PathBuf>,
@@ -87,6 +119,7 @@ pub struct AppConfig {
 #[serde(default)]
 struct FileConfig {
     mode: Option<String>,
+    log_level: Option<String>,
     host: Option<String>,
     port: Option<u16>,
     workspace_root: Option<PathBuf>,
@@ -110,6 +143,7 @@ struct FileConfig {
 
 struct Settings {
     mode: RunMode,
+    log_level: LogLevel,
     host: String,
     port: u16,
     workspace_root: PathBuf,
@@ -135,6 +169,7 @@ impl Settings {
     fn defaults() -> anyhow::Result<Self> {
         Ok(Self {
             mode: RunMode::Stdio,
+            log_level: LogLevel::Info,
             host: "127.0.0.1".to_string(),
             port: 8765,
             workspace_root: std::env::current_dir()?,
@@ -160,6 +195,9 @@ impl Settings {
     fn apply_file(&mut self, file: FileConfig) -> anyhow::Result<()> {
         if let Some(value) = file.mode {
             self.mode = RunMode::parse(&value, "YAML mode")?;
+        }
+        if let Some(value) = file.log_level {
+            self.log_level = LogLevel::parse(&value, "YAML log_level")?;
         }
         set_some(&mut self.host, file.host);
         set_some(&mut self.port, file.port);
@@ -194,6 +232,9 @@ impl Settings {
     fn apply_environment(&mut self) -> anyhow::Result<()> {
         if let Some(value) = env_string("FORGE_MCP_MODE") {
             self.mode = RunMode::parse(&value, "FORGE_MCP_MODE")?;
+        }
+        if let Some(value) = env_string("FORGE_MCP_LOG_LEVEL") {
+            self.log_level = LogLevel::parse(&value, "FORGE_MCP_LOG_LEVEL")?;
         }
         if let Some(value) = env_string("FORGE_MCP_HOST") {
             self.host = value;
@@ -325,6 +366,7 @@ impl AppConfig {
 
         Ok(Self {
             mode: settings.mode,
+            log_level: settings.log_level,
             host: settings.host,
             port: settings.port,
             config_path,
@@ -355,6 +397,7 @@ impl AppConfig {
         let workspace_root = fs::canonicalize(workspace_root).unwrap();
         Self {
             mode: RunMode::Stdio,
+            log_level: LogLevel::Info,
             host: "127.0.0.1".to_string(),
             port: 8765,
             config_path: None,
@@ -555,6 +598,7 @@ mod tests {
         let file: FileConfig = serde_yaml::from_str(
             r#"
 mode: serve
+log_level: DEBUG
 host: 0.0.0.0
 port: 9000
 workspace_root: /tmp
@@ -565,10 +609,19 @@ auth_mode: none
         .unwrap();
 
         assert_eq!(file.mode.as_deref(), Some("serve"));
+        assert_eq!(file.log_level.as_deref(), Some("DEBUG"));
         assert_eq!(file.host.as_deref(), Some("0.0.0.0"));
         assert_eq!(file.port, Some(9000));
         assert_eq!(file.max_batch_items, Some(25));
         assert_eq!(file.auth_mode.as_deref(), Some("none"));
+    }
+
+    #[test]
+    fn parses_all_supported_log_levels() {
+        assert_eq!(LogLevel::parse("ERROR", "test").unwrap(), LogLevel::Error);
+        assert_eq!(LogLevel::parse("WARN", "test").unwrap(), LogLevel::Warn);
+        assert_eq!(LogLevel::parse("INFO", "test").unwrap(), LogLevel::Info);
+        assert_eq!(LogLevel::parse("DEBUG", "test").unwrap(), LogLevel::Debug);
     }
 
     #[test]
