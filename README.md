@@ -30,6 +30,8 @@ The current milestone implements the handshake-era MCP protocol defined by revis
 
 The HTTP transport uses the JSON response profile of Streamable HTTP: each client message is a POST to `/mcp`, JSON-RPC requests receive `application/json`, accepted notifications receive `202 Accepted`, GET returns `405 Method Not Allowed` because server-initiated SSE is not implemented yet, and DELETE can terminate a session.
 
+A lightweight unauthenticated health endpoint is available at `GET /health`. It returns HTTP `200 OK` with `{"status":"ok"}` and intentionally exposes no workspace, OAuth, or runtime details.
+
 ## Tool scope
 
 ForgeMCP is designed around ten tools:
@@ -185,6 +187,20 @@ MCP endpoint:
 ```text
 http://127.0.0.1:8765/mcp
 ```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8765/health
+```
+
+Response:
+
+```json
+{"status":"ok"}
+```
+
+The health endpoint does not require OAuth and is suitable for Docker, Kubernetes, reverse-proxy, or tunnel health probes.
 
 For ChatGPT or another public client, configure the external HTTPS origin and Admin PIN:
 
