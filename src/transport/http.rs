@@ -67,6 +67,7 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
     };
 
     let router = Router::new()
+        .route("/health", get(health))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
         .route(
             "/.well-known/oauth-protected-resource",
@@ -99,6 +100,16 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
     )
     .await?;
     Ok(())
+}
+
+async fn health() -> Response {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "status": "ok"
+        })),
+    )
+        .into_response()
 }
 
 async fn post_mcp(
@@ -851,6 +862,12 @@ mod tests {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             allowed_origins: Arc::new(allowed_origins("127.0.0.1", 8765)),
         }
+    }
+
+    #[tokio::test]
+    async fn health_check_returns_ok() {
+        let response = health().await;
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]
