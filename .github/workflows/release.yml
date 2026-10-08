@@ -1,0 +1,140 @@
+name: Release binaries
+
+on:
+  push:
+    branches:
+      - "release/v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            extension: ""
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            extension: ""
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            extension: ".exe"
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            extension: ".exe"
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            extension: ""
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            extension: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Validate version and release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#release/}"
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid release tag: $tag"; exit 1; }
+          [[ "$tag" == "v$version" ]] || { echo "Release $tag does not match Cargo.toml $version"; exit 1; }
+
+      - name: Build optimized native binary
+        shell: bash
+        run: cargo build --release --target "${{ matrix.target }}"
+
+      - name: Smoke test native executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          "target/${{ matrix.target }}/release/forge-mcp${{ matrix.extension }}" --help
+
+      - name: Package binary and configuration docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#release/}"
+          archive="forge-mcp-${tag}-${{ matrix.target }}"
+          mkdir -p staging dist
+          cp "target/${{ matrix.target }}/release/forge-mcp${{ matrix.extension }}" staging/
+          cp README.md OAUTH_SETUP.md forge-mcp.example.yaml staging/
+          if [[ "${{ matrix.extension }}" == ".exe" ]]; then
+            (cd staging && python -m zipfile -c "../dist/${archive}.zip" \
+              forge-mcp.exe README.md OAUTH_SETUP.md forge-mcp.example.yaml)
+          else
+            (cd staging && tar -czf "../dist/${archive}.tar.gz" \
+              forge-mcp README.md OAUTH_SETUP.md forge-mcp.example.yaml)
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-24.04
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify all six packages and write SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#release/}"
+          expected=(
+            "forge-mcp-${tag}-x86_64-apple-darwin.tar.gz"
+            "forge-mcp-${tag}-aarch64-apple-darwin.tar.gz"
+            "forge-mcp-${tag}-x86_64-pc-windows-msvc.zip"
+            "forge-mcp-${tag}-aarch64-pc-windows-msvc.zip"
+            "forge-mcp-${tag}-x86_64-unknown-linux-gnu.tar.gz"
+            "forge-mcp-${tag}-aarch64-unknown-linux-gnu.tar.gz"
+          )
+          for file in "${expected[@]}"; do
+            test -s "dist/$file" || { echo "Missing or empty package: $file"; exit 1; }
+          done
+          actual="$(find dist -maxdepth 1 -type f | wc -l)"
+          [[ "$actual" -eq 6 ]] || { echo "Expected 6 packages, found $actual"; exit 1; }
+          (cd dist && sha256sum forge-mcp-* | sort > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+
+      - name: Create version tag and publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#release/}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing to overwrite it"
+            exit 1
+          fi
+          gh release create "$tag" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "ForgeMCP $tag" \
+            --notes-file RELEASE_NOTES.md \
+            --latest

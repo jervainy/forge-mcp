@@ -87,6 +87,14 @@ ToolRegistry
 
 File, shell, workspace, batch, and audit code do not depend on the OAuth or MCP transport implementation.
 
+## Prebuilt releases
+
+Versioned binaries for macOS, Windows, and Linux are published on the [GitHub Releases page](https://github.com/jervainy/forge-mcp/releases).
+
+Download the archive for your CPU (`x86_64` or `aarch64`/ARM64), unpack it and run `forge-mcp --help` (or `forge-mcp.exe --help` on Windows). Each archive includes a YAML example and the OAuth setup guide. Release checksums are in `SHA256SUMS.txt`.
+
+The release workflow builds six native targets from a `release/vX.Y.Z` staging branch, runs a CLI smoke test on each target, and **only after all six succeed** publishes a GitHub Release plus the matching `vX.Y.Z` tag. For the first release, the intended version is `v0.1.0`.
+
 ## Configuration
 
 ForgeMCP supports an optional YAML configuration file, following the same precedence model as local-shell-mcp:
