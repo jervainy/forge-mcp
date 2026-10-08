@@ -16,7 +16,7 @@ use std::{
 use axum::{
     response::{IntoResponse, Response, Sse, sse::{Event, KeepAlive}},
 };
-use futures::{StreamExt, stream};
+use futures::stream;
 use tokio::sync::{Mutex, watch};
 use uuid::Uuid;
 
@@ -243,8 +243,8 @@ mod tests {
         let hub = SseHub::default();
         let log = hub.create().await.unwrap();
         let mut subscriber = log.subscribe(None).unwrap();
-        let priming = subscriber.next().await.unwrap().to_string();
-        assert!(priming.contains("data: "));
+        assert!(subscriber.next().await.is_some());
+        assert_eq!(subscriber.cursor, Some(0));
         let cursor = format!("{}:0", log.id);
         log.emit_json(&serde_json::json!({"jsonrpc":"2.0","id":1,"result":{}}))
             .await;
@@ -254,7 +254,8 @@ mod tests {
         let (replay, last) = hub.resume(&cursor).await.unwrap();
         assert_eq!(last, 0);
         let mut subscriber = replay.subscribe(Some(last)).unwrap();
-        assert!(subscriber.next().await.unwrap().to_string().contains("jsonrpc"));
+        assert!(subscriber.next().await.is_some());
+        assert_eq!(subscriber.cursor, Some(1));
         assert!(subscriber.next().await.is_none());
     }
 
