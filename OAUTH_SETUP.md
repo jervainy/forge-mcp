@@ -45,13 +45,28 @@ or set `FORGE_MCP_CONFIG`. Keep the Admin PIN and JWT secret in environment vari
 
 OAuth is the default HTTP authentication mode. Direct localhost requests are bypassed by default for development, but a request that arrived through a reverse proxy/tunnel does not inherit that bypass.
 
-For a public ChatGPT endpoint, configure at least:
+For a public ChatGPT endpoint via ngrok or another HTTPS tunnel, the public origin can be inferred automatically and **does not have to be known at startup**:
+
+```yaml
+mode: serve
+host: 127.0.0.1
+port: 8765
+auth_mode: oauth
+auth_bypass_localhost: false
+# public_base_url: omit for automatic tunnel detection
+```
+
+Provide the Admin PIN through an environment variable (mandatory in HTTP OAuth mode, even without `public_base_url`):
 
 ```bash
-export FORGE_MCP_PUBLIC_BASE_URL="https://forge.example.com"
-export FORGE_MCP_AUTH_MODE="oauth"
 export FORGE_MCP_OAUTH_ADMIN_PIN="replace-with-a-long-random-pin"
+forge-mcp --config ~/.config/forge-mcp/config.yaml
+ngrok http 8765
 ```
+
+ForgeMCP reads the public Host and HTTPS information from requests (and accepts forwarded host/protocol metadata only from a loopback-connected proxy). It uses the resulting origin for protected-resource metadata, authorization-server metadata, JWT issuer/audience, and validation. The external HTTPS URL may change between ngrok sessions; after a URL change, reconnect the ChatGPT custom MCP server using the new `https://.../mcp` URL and repeat OAuth authorization.
+
+Security: **your tunnel or reverse proxy must enforce which public Host values reach ForgeMCP**. Host and forwarding headers are client-controlled unless verified/overwritten by your trusted ingress. For production, prefer a fixed `public_base_url` or strict proxy host validation; never expose the plain HTTP listener directly to the internet. If needed, setting `public_base_url: https://forge.example.com` still overrides automatic discovery.
 
 ForgeMCP creates and persists a random 64-character HS256 secret in:
 
@@ -78,7 +93,7 @@ export FORGE_MCP_AUTH_BYPASS_LOCALHOST=true
 
 `FORGE_MCP_OAUTH_ACCESS_TOKEN_TTL_S=0` means access tokens do not automatically expire. This mirrors local-shell-mcp's default and avoids requiring refresh-token support in the first OAuth implementation. For a multi-user or internet-facing production service, short-lived access tokens plus refresh-token rotation should be added.
 
-When `FORGE_MCP_PUBLIC_BASE_URL` is configured, ForgeMCP requires HTTPS and an Admin PIN of at least 8 non-placeholder characters.
+When `FORGE_MCP_PUBLIC_BASE_URL` is configured, ForgeMCP requires HTTPS. For all HTTP OAuth deployments, an Admin PIN of at least 8 non-placeholder characters is required whether the public URL is configured or automatically discovered.
 
 ## Scopes
 
@@ -151,7 +166,7 @@ curl -sS "$BASE/.well-known/oauth-protected-resource"
 curl -sS "$BASE/.well-known/oauth-authorization-server"
 ```
 
-The authorization-server metadata must advertise `registration_endpoint` pointing to the public origin, not `localhost`. Set `public_base_url` to the exact HTTPS origin exposed by ngrok or your reverse proxy (without `/mcp`), then restart ForgeMCP after changes.
+The authorization-server metadata must advertise `registration_endpoint` pointing to the public origin, not `localhost`. In automatic mode, verify the discovered external HTTPS origin and confirm your ingress passes a public Host (or an `X-Forwarded-Host` from a trusted local proxy). If the returned issuer is localhost or HTTP, check proxy host/HTTPS forwarding; setting `public_base_url` remains an explicit fallback but is not required for normal ngrok usage.
 
 To test Dynamic Client Registration without accessing ChatGPT, use a test redirect URI:
 
