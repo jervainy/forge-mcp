@@ -335,7 +335,11 @@ async fn delete_mcp(
     StatusCode::NO_CONTENT.into_response()
 }
 
-async fn oauth_protected_resource(State(state): State<HttpState>, headers: HeaderMap) -> Response {
+async fn oauth_protected_resource(
+    State(state): State<HttpState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Response {
     if !state.oauth.enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -345,13 +349,15 @@ async fn oauth_protected_resource(State(state): State<HttpState>, headers: Heade
     };
     oauth_json(
         StatusCode::OK,
-        state
-            .oauth
-            .protected_resource_metadata(&base),
+        state.oauth.protected_resource_metadata(&base),
     )
 }
 
-async fn oauth_server_metadata(State(state): State<HttpState>, headers: HeaderMap) -> Response {
+async fn oauth_server_metadata(
+    State(state): State<HttpState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Response {
     if !state.oauth.enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -361,9 +367,7 @@ async fn oauth_server_metadata(State(state): State<HttpState>, headers: HeaderMa
     };
     oauth_json(
         StatusCode::OK,
-        state
-            .oauth
-            .authorization_server_metadata(&base),
+        state.oauth.authorization_server_metadata(&base),
     )
 }
 
@@ -687,11 +691,10 @@ fn request_base_url(
         return Ok(value.trim_end_matches('/').to_string());
     }
 
-    let base = infer_request_origin(peer, headers)
-        .map_err(|reason| {
-            warn!(reason, "OAuth public origin could not be inferred");
-            plain_response(StatusCode::BAD_REQUEST, format!("OAuth origin: {reason}"))
-        })?;
+    let base = infer_request_origin(peer, headers).map_err(|reason| {
+        warn!(reason, "OAuth public origin could not be inferred");
+        plain_response(StatusCode::BAD_REQUEST, format!("OAuth origin: {reason}"))
+    })?;
     debug!(origin = %base, "inferred OAuth public origin from request");
     Ok(base)
 }
@@ -749,7 +752,7 @@ fn infer_request_origin(peer: SocketAddr, headers: &HeaderMap) -> Result<String,
 fn parse_origin_host(raw: &str) -> Result<String, &'static str> {
     if raw.is_empty()
         || raw.contains(|c: char| c.is_whitespace() || c.is_control())
-        || raw.contains(['@', '/', '\\', '?', '#', ','])
+        || raw.chars().any(|c| matches!(c, '@' | '/' | '\\' | '?' | '#' | ','))
     {
         return Err("invalid Host authority");
     }
@@ -1018,7 +1021,12 @@ mod tests {
 
     #[test]
     fn accepts_missing_origin_for_non_browser_clients() {
-        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &HeaderMap::new()).is_ok());
+        assert!(validate_origin(
+            &state(),
+            "127.0.0.1:10000".parse().unwrap(),
+            &HeaderMap::new()
+        )
+        .is_ok());
     }
 
     #[test]
@@ -1026,7 +1034,12 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("https://example.com"));
 
-        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &headers).is_err());
+        assert!(validate_origin(
+            &state(),
+            "127.0.0.1:10000".parse().unwrap(),
+            &headers
+        )
+        .is_err());
     }
 
     #[test]
@@ -1034,7 +1047,12 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("http://localhost:8765"));
 
-        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &headers).is_ok());
+        assert!(validate_origin(
+            &state(),
+            "127.0.0.1:10000".parse().unwrap(),
+            &headers
+        )
+        .is_ok());
     }
 
     #[test]
