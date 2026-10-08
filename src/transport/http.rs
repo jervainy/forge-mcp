@@ -283,7 +283,7 @@ async fn get_mcp(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(response) = validate_origin(&state, &headers) {
+    if let Err(response) = validate_origin(&state, peer, &headers) {
         return response;
     }
     if let Err(response) = authenticate(&state, peer, &headers) {
@@ -302,7 +302,7 @@ async fn delete_mcp(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(response) = validate_origin(&state, &headers) {
+    if let Err(response) = validate_origin(&state, peer, &headers) {
         return response;
     }
     let auth = match authenticate(&state, peer, &headers) {
