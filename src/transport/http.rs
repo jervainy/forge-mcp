@@ -335,7 +335,7 @@ async fn get_mcp(
         return response;
     }
 
-    if !optional_header(&headers, ACCEPT)
+    if !optional_header(&headers, ACCEPT.as_str())
         .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"))
     {
         return plain_response(
