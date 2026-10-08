@@ -237,7 +237,12 @@ async fn post_mcp(
             if let Some(token) = progress_token.as_ref() {
                 log.emit_json(&progress_notification(token, 0)).await;
             }
-            let result = session.server.lock().await.handle_with_auth(message, &auth).await;
+            let result = session
+                .server
+                .lock()
+                .await
+                .handle_with_auth(message, &auth)
+                .await;
             if let Some(response) = result {
                 if let Some(token) = progress_token.as_ref() {
                     log.emit_json(&progress_notification(token, 1)).await;
@@ -250,7 +255,12 @@ async fn post_mcp(
         return sse::response(listener);
     }
 
-    let response = session.server.lock().await.handle_with_auth(message, &auth).await;
+    let response = session
+        .server
+        .lock()
+        .await
+        .handle_with_auth(message, &auth)
+        .await;
 
     if is_notification {
         return match response {
@@ -328,7 +338,10 @@ async fn get_mcp(
     if !optional_header(&headers, ACCEPT)
         .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"))
     {
-        return plain_response(StatusCode::NOT_ACCEPTABLE, "Accept must include text/event-stream");
+        return plain_response(
+            StatusCode::NOT_ACCEPTABLE,
+            "Accept must include text/event-stream",
+        );
     }
 
     let auth = match authenticate(&state, peer, &headers) {
@@ -395,11 +408,18 @@ fn progress_notification(token: &Value, progress: u64) -> Value {
 
 fn sse_error_response(error: StreamError) -> Response {
     match error {
-        StreamError::InvalidCursor => plain_response(StatusCode::BAD_REQUEST, "invalid Last-Event-ID"),
+        StreamError::InvalidCursor => {
+            plain_response(StatusCode::BAD_REQUEST, "invalid Last-Event-ID")
+        }
         StreamError::UnknownStream => StatusCode::NOT_FOUND.into_response(),
         StreamError::ExpiredCursor => plain_response(StatusCode::GONE, "SSE replay window expired"),
-        StreamError::AlreadyConnected => plain_response(StatusCode::CONFLICT, "SSE stream is already connected"),
-        StreamError::AtCapacity => plain_response(StatusCode::TOO_MANY_REQUESTS, "too many SSE streams for this session"),
+        StreamError::AlreadyConnected => {
+            plain_response(StatusCode::CONFLICT, "SSE stream is already connected")
+        }
+        StreamError::AtCapacity => plain_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too many SSE streams for this session",
+        ),
         StreamError::SessionClosed => StatusCode::NOT_FOUND.into_response(),
     }
 }
