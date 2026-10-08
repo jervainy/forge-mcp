@@ -13,8 +13,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{
-    response::{IntoResponse, Response, Sse, sse::{Event, KeepAlive}},
+use axum::response::{
+    IntoResponse, Response, Sse,
+    sse::{Event, KeepAlive},
 };
 use futures::stream;
 use tokio::sync::{Mutex, watch};
@@ -49,8 +50,7 @@ impl SseHub {
 
         let mut streams = self.inner.lock().await;
         streams.retain(|_, stream| {
-            stream.connected.load(Ordering::SeqCst)
-                || (stream.born.elapsed() < REPLAY_TTL)
+            stream.connected.load(Ordering::SeqCst) || (stream.born.elapsed() < REPLAY_TTL)
         });
         if streams.len() >= MAX_STREAMS {
             return Err(StreamError::AtCapacity);
@@ -91,7 +91,9 @@ impl SseHub {
 fn parse_event_id(value: &str) -> Result<(&str, u64), StreamError> {
     let (id, position) = value.rsplit_once(':').ok_or(StreamError::InvalidCursor)?;
     Uuid::parse_str(id).map_err(|_| StreamError::InvalidCursor)?;
-    let position = position.parse::<u64>().map_err(|_| StreamError::InvalidCursor)?;
+    let position = position
+        .parse::<u64>()
+        .map_err(|_| StreamError::InvalidCursor)?;
     Ok((id, position))
 }
 
@@ -200,9 +202,10 @@ impl Listener {
         loop {
             {
                 let state = self.log.state.lock().await;
-                let next = state.events.iter().find(|event| {
-                    self.cursor.is_none_or(|last| event.position > last)
-                });
+                let next = state
+                    .events
+                    .iter()
+                    .find(|event| self.cursor.is_none_or(|last| event.position > last));
                 if let Some(next) = next {
                     self.cursor = Some(next.position);
                     return Some(
@@ -276,10 +279,16 @@ mod tests {
         let hub = SseHub::default();
         let log = hub.create().await.unwrap();
         let listener = log.subscribe(None).unwrap();
-        assert!(matches!(log.subscribe(None), Err(StreamError::AlreadyConnected)));
+        assert!(matches!(
+            log.subscribe(None),
+            Err(StreamError::AlreadyConnected)
+        ));
         drop(listener);
         assert!(log.subscribe(None).is_ok());
         hub.shutdown().await;
-        assert!(matches!(hub.create().await, Err(StreamError::SessionClosed)));
+        assert!(matches!(
+            hub.create().await,
+            Err(StreamError::SessionClosed)
+        ));
     }
 }
