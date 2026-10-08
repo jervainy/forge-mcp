@@ -348,7 +348,11 @@ impl AppConfig {
                 .with_context(|| format!("failed to create {}", settings.state_dir.display()))?;
         }
 
-        if public_base_url.is_some() {
+        // Public OAuth must always require owner approval, including when the
+        // public HTTPS origin is discovered dynamically through a tunnel.
+        if settings.auth_mode == AuthMode::OAuth
+            && (settings.mode == RunMode::Serve || public_base_url.is_some())
+        {
             validate_admin_pin(settings.oauth_admin_pin.as_deref())?;
         }
 
@@ -552,7 +556,7 @@ fn validate_admin_pin(pin: Option<&str>) -> anyhow::Result<()> {
     let value = pin.unwrap_or("").trim();
     if value.len() < 8 || weak.contains(&value) {
         bail!(
-            "oauth_admin_pin must be a non-placeholder value of at least 8 characters when public_base_url is configured"
+            "oauth_admin_pin must be a non-placeholder value of at least 8 characters for HTTP OAuth"
         );
     }
     Ok(())
