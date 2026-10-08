@@ -324,15 +324,84 @@ async fn get_mcp(
     if let Err(response) = validate_origin(&state, peer, &headers) {
         return response;
     }
-    if let Err(response) = authenticate(&state, peer, &headers) {
-        return response;
+
+    if !optional_header(&headers, ACCEPT)
+        .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"))
+    {
+        return plain_response(StatusCode::NOT_ACCEPTABLE, "Accept must include text/event-stream");
     }
 
-    let mut response = StatusCode::METHOD_NOT_ALLOWED.into_response();
-    response
-        .headers_mut()
-        .insert(ALLOW, HeaderValue::from_static("POST, DELETE"));
-    response
+    let auth = match authenticate(&state, peer, &headers) {
+        Ok(auth) => auth,
+        Err(response) => return response,
+    };
+
+    if let Some(version) = optional_header(&headers, PROTOCOL_VERSION_HEADER) {
+        if version != PROTOCOL_VERSION {
+            return plain_response(
+                StatusCode::BAD_REQUEST,
+                format!("unsupported MCP protocol version: {version}"),
+            );
+        }
+    }
+
+    let session_id = match required_header(&headers, SESSION_HEADER) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions.get(session_id).cloned()
+    };
+    let Some(session) = session else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    if session.owner != auth.identity_key() {
+        return plain_response(
+            StatusCode::FORBIDDEN,
+            "MCP session belongs to a different authenticated client",
+        );
+    }
+
+    let (log, cursor) = match optional_header(&headers, "last-event-id") {
+        Some(id) => match session.sse.resume(id).await {
+            Ok((log, cursor)) => (log, Some(cursor)),
+            Err(error) => return sse_error_response(error),
+        },
+        None => match session.sse.create().await {
+            Ok(log) => (log, None),
+            Err(error) => return sse_error_response(error),
+        },
+    };
+
+    match log.subscribe(cursor) {
+        Ok(listener) => sse::response(listener),
+        Err(error) => sse_error_response(error),
+    }
+}
+
+fn progress_notification(token: &Value, progress: u64) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/progress",
+        "params": {
+            "progressToken": token,
+            "progress": progress,
+            "total": 1
+        }
+    })
+}
+
+fn sse_error_response(error: StreamError) -> Response {
+    match error {
+        StreamError::InvalidCursor => plain_response(StatusCode::BAD_REQUEST, "invalid Last-Event-ID"),
+        StreamError::UnknownStream => StatusCode::NOT_FOUND.into_response(),
+        StreamError::ExpiredCursor => plain_response(StatusCode::GONE, "SSE replay window expired"),
+        StreamError::AlreadyConnected => plain_response(StatusCode::CONFLICT, "SSE stream is already connected"),
+        StreamError::AtCapacity => plain_response(StatusCode::TOO_MANY_REQUESTS, "too many SSE streams for this session"),
+        StreamError::SessionClosed => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn delete_mcp(
