@@ -34,16 +34,18 @@ use crate::{
         mcp::PROTOCOL_VERSION,
     },
     server::ForgeServer,
+    transport::sse::{self, SseHub, StreamError},
 };
 
 const SESSION_HEADER: &str = "mcp-session-id";
 const PROTOCOL_VERSION_HEADER: &str = "mcp-protocol-version";
 
-type Session = Arc<Mutex<SessionEntry>>;
+type Session = Arc<SessionEntry>;
 
 struct SessionEntry {
-    server: ForgeServer,
+    server: Mutex<ForgeServer>,
     owner: Option<String>,
+    sse: SseHub,
 }
 
 #[derive(Clone)]
@@ -267,10 +269,11 @@ async fn initialize_session(
     let session_id = Uuid::new_v4().to_string();
     state.sessions.write().await.insert(
         session_id.clone(),
-        Arc::new(Mutex::new(SessionEntry {
-            server,
+        Arc::new(SessionEntry {
+            server: Mutex::new(server),
             owner: auth.identity_key(),
-        })),
+            sse: SseHub::default(),
+        }),
     );
 
     debug!(session_id, "created MCP HTTP session");
@@ -323,7 +326,7 @@ async fn delete_mcp(
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    if session.lock().await.owner != auth.identity_key() {
+    if session.owner != auth.identity_key() {
         return plain_response(
             StatusCode::FORBIDDEN,
             "MCP session belongs to a different authenticated client",
@@ -331,6 +334,7 @@ async fn delete_mcp(
     }
 
     state.sessions.write().await.remove(&session_id);
+    session.sse.shutdown().await;
     debug!(session_id, "terminated MCP HTTP session");
     StatusCode::NO_CONTENT.into_response()
 }
