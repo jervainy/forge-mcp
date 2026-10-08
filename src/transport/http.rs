@@ -205,17 +205,52 @@ async fn post_mcp(
         return StatusCode::NOT_FOUND.into_response();
     };
 
+    if session.owner != auth.identity_key() {
+        return plain_response(
+            StatusCode::FORBIDDEN,
+            "MCP session belongs to a different authenticated client",
+        );
+    }
+
     let is_notification = message.is_notification();
-    let response = {
-        let mut entry = session.lock().await;
-        if entry.owner != auth.identity_key() {
-            return plain_response(
-                StatusCode::FORBIDDEN,
-                "MCP session belongs to a different authenticated client",
-            );
-        }
-        entry.server.handle_with_auth(message, &auth).await
-    };
+
+    // Tool execution continues after SSE disconnect so Last-Event-ID can
+    // recover the response. The session lock does not cover SSE replay.
+    if message.method == "tools/call" && !is_notification {
+        let log = match session.sse.create().await {
+            Ok(log) => log,
+            Err(error) => return sse_error_response(error),
+        };
+        let listener = match log.subscribe(None) {
+            Ok(listener) => listener,
+            Err(error) => return sse_error_response(error),
+        };
+        let progress_token = message
+            .params
+            .as_ref()
+            .and_then(|params| params.get("_meta"))
+            .and_then(|meta| meta.get("progressToken"))
+            .filter(|token| token.is_string() || token.is_i64() || token.is_u64())
+            .cloned();
+
+        tokio::spawn(async move {
+            if let Some(token) = progress_token.as_ref() {
+                log.emit_json(&progress_notification(token, 0)).await;
+            }
+            let result = session.server.lock().await.handle_with_auth(message, &auth).await;
+            if let Some(response) = result {
+                if let Some(token) = progress_token.as_ref() {
+                    log.emit_json(&progress_notification(token, 1)).await;
+                }
+                log.emit_json(&response).await;
+            }
+            log.finish().await;
+        });
+
+        return sse::response(listener);
+    }
+
+    let response = session.server.lock().await.handle_with_auth(message, &auth).await;
 
     if is_notification {
         return match response {
