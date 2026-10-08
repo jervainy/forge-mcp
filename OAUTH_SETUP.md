@@ -139,3 +139,34 @@ export FORGE_MCP_AUTH_BYPASS_LOCALHOST=false
 export FORGE_MCP_OAUTH_ADMIN_PIN="replace-with-a-long-random-pin"
 cargo run -- serve
 ```
+
+## Troubleshooting ChatGPT client registration
+
+If ChatGPT reports that it could not register an OAuth client, the failure occurs before the Admin PIN screen. Verify the public HTTPS URL and metadata first:
+
+```bash
+BASE="https://your-public-host.example.com"
+curl -i "$BASE/health"
+curl -sS "$BASE/.well-known/oauth-protected-resource"
+curl -sS "$BASE/.well-known/oauth-authorization-server"
+```
+
+The authorization-server metadata must advertise `registration_endpoint` pointing to the public origin, not `localhost`. Set `public_base_url` to the exact HTTPS origin exposed by ngrok or your reverse proxy (without `/mcp`), then restart ForgeMCP after changes.
+
+To test Dynamic Client Registration without accessing ChatGPT, use a test redirect URI:
+
+```bash
+curl -i -X POST "$BASE/oauth/register" \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "client_name": "DCR test",
+    "redirect_uris": ["https://chatgpt.com/connector/oauth/test"],
+    "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"],
+    "token_endpoint_auth_method": "none"
+  }'
+```
+
+A successful registration returns `201 Created`, a JSON `client_id`, and `grant_types: ["authorization_code"]`. ForgeMCP intentionally does **not** advertise refresh-token support or issue refresh tokens. Enabling `log_level: DEBUG` shows the requested grant types, while rejected registrations are logged at WARN with a reason.
+
+If the response is HTML rather than JSON, check your tunnel/proxy configuration, including possible ngrok browser-warning or error pages. If it returns HTTP `400` with `invalid_client_metadata`, inspect the logged rejected metadata reason. Avoid configuring `auth_bypass_localhost: true` for public endpoints; explicit `false` is safest behind tunnels or reverse proxies.
