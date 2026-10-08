@@ -7,7 +7,7 @@ use std::{
 use axum::{
     Form, Json, Router,
     body::Bytes,
-    extract::{ConnectInfo, Query, State},
+    extract::{ConnectInfo, Query, State, rejection::JsonRejection},
     http::{
         HeaderMap, HeaderValue, StatusCode,
         header::{ACCEPT, ALLOW, AUTHORIZATION, CONTENT_TYPE, HOST, LOCATION, ORIGIN},
@@ -18,7 +18,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -360,15 +360,47 @@ async fn oauth_server_metadata(State(state): State<HttpState>, headers: HeaderMa
 
 async fn oauth_register(
     State(state): State<HttpState>,
-    Json(request): Json<RegistrationRequest>,
+    request: Result<Json<RegistrationRequest>, JsonRejection>,
 ) -> Response {
     if !state.oauth.enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
 
+    let Json(request) = match request {
+        Ok(request) => request,
+        Err(error) => {
+            warn!(reason = %error, "OAuth DCR request could not be parsed");
+            return oauth_json(
+                StatusCode::BAD_REQUEST,
+                json!({
+                    "error": "invalid_client_metadata",
+                    "error_description": "Registration request must be a valid JSON object"
+                }),
+            );
+        }
+    };
+
+    debug!(
+        requested_grants = ?request.grant_types,
+        requested_response_types = ?request.response_types,
+        requested_auth_method = ?request.token_endpoint_auth_method,
+        "OAuth DCR registration request"
+    );
+
     match state.oauth.register(request) {
-        Ok(response) => oauth_json(StatusCode::CREATED, response),
-        Err(error) => oauth_error_response(error),
+        Ok(response) => {
+            info!(client_id = %response.client_id, "OAuth DCR client registered");
+            oauth_json(StatusCode::CREATED, response)
+        }
+        Err(error) => {
+            warn!(
+                status = error.status,
+                error = %error.error,
+                reason = %error.description,
+                "OAuth DCR client registration rejected"
+            );
+            oauth_error_response(error)
+        }
     }
 }
 
