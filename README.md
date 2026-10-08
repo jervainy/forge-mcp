@@ -15,7 +15,7 @@ The current milestone implements the handshake-era MCP protocol defined by revis
 - `tools/list`
 - `tools/call`
 - stdio transport
-- Streamable HTTP transport using JSON responses
+- Streamable HTTP with JSON and SSE responses, session-scoped event IDs, and resumable streams
 - stateful HTTP sessions via `MCP-Session-Id`
 - `MCP-Protocol-Version` validation
 - Origin validation
@@ -28,7 +28,7 @@ The current milestone implements the handshake-era MCP protocol defined by revis
 - per-tool OAuth `securitySchemes` and scope enforcement
 - tool schemas generated from Rust request models with `schemars`
 
-The HTTP transport uses the JSON response profile of Streamable HTTP: each client message is a POST to `/mcp`, JSON-RPC requests receive `application/json`, accepted notifications receive `202 Accepted`, GET returns `405 Method Not Allowed` because server-initiated SSE is not implemented yet, and DELETE can terminate a session.
+The HTTP transport follows the MCP 2025-11-25 Streamable HTTP profile. Each client message is POSTed to `/mcp`; initialization and ordinary requests receive JSON, while `tools/call` uses `text/event-stream` with an initial event ID, optional MCP progress notifications and a final JSON-RPC response. Accepted client notifications receive `202 Accepted`. Clients can open `GET /mcp` SSE connections for server events, or resume a disconnected POST/GET stream using `Last-Event-ID`. `DELETE /mcp` terminates a session and closes its SSE streams.
 
 A lightweight unauthenticated health endpoint is available at `GET /health`. It returns HTTP `200 OK` with `{"status":"ok"}` and intentionally exposes no workspace, OAuth, or runtime details.
 
@@ -224,6 +224,31 @@ Expose the local HTTP endpoint through a trusted HTTPS tunnel or reverse proxy. 
 
 See [OAUTH_SETUP.md](OAUTH_SETUP.md) for the complete OAuth flow and settings.
 
+## SSE over Streamable HTTP
+
+MCP clients must send `Accept: application/json, text/event-stream` on POST and `Accept: text/event-stream` on GET. Existing `initialize`, `ping` and `tools/list` calls remain JSON responses; `tools/call` returns an SSE stream. The stream starts with an empty `data` event containing its unique ID, then sends a final JSON-RPC response and closes. If the request includes `params._meta.progressToken` (a string or integer), it also emits `notifications/progress` when execution starts and finishes.
+
+```http
+POST /mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Session-Id: <session-id>
+```
+
+A separate authenticated GET listener remains open, with periodic SSE keepalive comments:
+
+```http
+GET /mcp
+Accept: text/event-stream
+MCP-Session-Id: <session-id>
+```
+
+SSE event IDs use `<stream-uuid>:<sequence>`. To replay only events from the same stream after a disconnect, reconnect with `GET /mcp`, `Last-Event-ID: <stream-uuid>:<sequence>`, and the same authenticated session. The handler returns `404` for an unknown stream, `410` if replay history expired, and `409` if the same stream still has an active connection. Replay records are in memory only (up to 256 events per stream, kept for approximately 10 minutes), so restarting ForgeMCP invalidates all cursors. Per-session stream creation is limited to prevent unbounded memory use.
+
+The transport can deliver server-initiated MCP messages on GET SSE streams once a server feature emits them; no background file-watch/resource subscriptions are currently implemented. SSE does **not** yet stream raw shell stdout/stderr or granular batch-item progress. The tool still returns its final bounded result; the optional progress messages indicate start and completion only. Disconnection does not cancel the running command.
+
+`GET /health` stays a normal JSON endpoint, with no authentication or SSE.
+
 ## OAuth scopes
 
 ```text
@@ -280,6 +305,6 @@ Audit records are stored under `FORGE_MCP_STATE_DIR` (or the default ForgeMCP co
 2. stdio + Streamable HTTP
 3. OAuth 2.1 for ChatGPT
 4. Ten workspace tools + batch executor + WorkspaceGuard + audit
-5. SSE/server-to-client Streamable HTTP support where needed
+5. Incremental shell output, dynamic resource subscriptions, and server-originated MCP notifications
 6. MCP `2026-07-28` stateless lifecycle and `server/discover`
 7. Cross-check compatibility with official MCP SDK clients
