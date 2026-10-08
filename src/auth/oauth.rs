@@ -752,9 +752,7 @@ mod tests {
         let service = service();
         let response = service
             .register(RegistrationRequest {
-                redirect_uris: vec![
-                    "https://chatgpt.com/connector/oauth/example".to_string(),
-                ],
+                redirect_uris: vec!["https://chatgpt.com/connector/oauth/example".to_string()],
                 client_name: Some("ChatGPT".to_string()),
                 grant_types: Some(vec![
                     "authorization_code".to_string(),
@@ -778,9 +776,7 @@ mod tests {
             vec!["authorization_code".to_string(), "password".to_string()],
         ] {
             let result = service.register(RegistrationRequest {
-                redirect_uris: vec![
-                    "https://chatgpt.com/connector/oauth/example".to_string(),
-                ],
+                redirect_uris: vec!["https://chatgpt.com/connector/oauth/example".to_string()],
                 client_name: None,
                 grant_types: Some(grants),
                 response_types: None,
