@@ -1236,7 +1236,10 @@ mod tests {
         get_headers.insert(SESSION_HEADER, HeaderValue::from_str(&id).unwrap());
         let get = get_mcp(State(state.clone()), ConnectInfo(peer), get_headers).await;
         assert_eq!(get.status(), StatusCode::OK);
-        assert_eq!(get.headers().get(CONTENT_TYPE).unwrap(), "text/event-stream");
+        assert_eq!(
+            get.headers().get(CONTENT_TYPE).unwrap(),
+            "text/event-stream"
+        );
     }
 
     #[tokio::test]
