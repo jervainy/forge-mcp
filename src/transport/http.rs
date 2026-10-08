@@ -19,6 +19,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -118,7 +119,7 @@ async fn post_mcp(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if let Err(response) = validate_origin(&state, &headers) {
+    if let Err(response) = validate_origin(&state, peer, &headers) {
         return response;
     }
 
@@ -338,11 +339,15 @@ async fn oauth_protected_resource(State(state): State<HttpState>, headers: Heade
     if !state.oauth.enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
+    let base = match request_base_url(&state, peer, &headers) {
+        Ok(base) => base,
+        Err(response) => return response,
+    };
     oauth_json(
         StatusCode::OK,
         state
             .oauth
-            .protected_resource_metadata(&request_base_url(&state, &headers)),
+            .protected_resource_metadata(&base),
     )
 }
 
@@ -350,11 +355,15 @@ async fn oauth_server_metadata(State(state): State<HttpState>, headers: HeaderMa
     if !state.oauth.enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
+    let base = match request_base_url(&state, peer, &headers) {
+        Ok(base) => base,
+        Err(response) => return response,
+    };
     oauth_json(
         StatusCode::OK,
         state
             .oauth
-            .authorization_server_metadata(&request_base_url(&state, &headers)),
+            .authorization_server_metadata(&base),
     )
 }
 
@@ -406,6 +415,7 @@ async fn oauth_register(
 
 async fn oauth_authorize_get(
     State(state): State<HttpState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Query(request): Query<AuthorizeRequest>,
 ) -> Response {
@@ -413,7 +423,10 @@ async fn oauth_authorize_get(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    let base = request_base_url(&state, &headers);
+    let base = match request_base_url(&state, peer, &headers) {
+        Ok(base) => base,
+        Err(response) => return response,
+    };
     let resource = state.oauth.resource(&base);
     match state.oauth.validate_authorize(&request, &resource) {
         Ok(details) => {
@@ -468,7 +481,10 @@ async fn oauth_authorize_post(
     }
 
     let request = form.request();
-    let base = request_base_url(&state, &headers);
+    let base = match request_base_url(&state, peer, &headers) {
+        Ok(base) => base,
+        Err(response) => return response,
+    };
     let issuer = state.oauth.issuer(&base);
     let resource = state.oauth.resource(&base);
 
@@ -511,6 +527,7 @@ async fn oauth_authorize_post(
 
 async fn oauth_token(
     State(state): State<HttpState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Form(request): Form<TokenRequest>,
 ) -> Response {
@@ -518,7 +535,10 @@ async fn oauth_token(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    let base = request_base_url(&state, &headers);
+    let base = match request_base_url(&state, peer, &headers) {
+        Ok(base) => base,
+        Err(response) => return response,
+    };
     let issuer = state.oauth.issuer(&base);
     let resource = state.oauth.resource(&base);
 
@@ -541,7 +561,7 @@ fn authenticate(
         return Ok(AuthContext::Unrestricted);
     }
 
-    let base = request_base_url(state, headers);
+    let base = request_base_url(state, peer, headers)?;
     let issuer = state.oauth.issuer(&base);
     let resource = state.oauth.resource(&base);
     let metadata_url = format!("{resource}/.well-known/oauth-protected-resource");
@@ -631,7 +651,11 @@ fn validate_post_headers(headers: &HeaderMap) -> Result<(), Response> {
     Ok(())
 }
 
-fn validate_origin(state: &HttpState, headers: &HeaderMap) -> Result<(), Response> {
+fn validate_origin(
+    state: &HttpState,
+    peer: SocketAddr,
+    headers: &HeaderMap,
+) -> Result<(), Response> {
     let Some(origin) = optional_header(headers, ORIGIN.as_str()) else {
         return Ok(());
     };
@@ -644,6 +668,9 @@ fn validate_origin(state: &HttpState, headers: &HeaderMap) -> Result<(), Respons
             .oauth
             .public_base_url()
             .is_some_and(|base| base.eq_ignore_ascii_case(origin.trim_end_matches('/')))
+        || (state.oauth.public_base_url().is_none()
+            && infer_request_origin(peer, headers)
+                .is_ok_and(|base| base.eq_ignore_ascii_case(origin.trim_end_matches('/'))))
     {
         Ok(())
     } else {
@@ -651,19 +678,106 @@ fn validate_origin(state: &HttpState, headers: &HeaderMap) -> Result<(), Respons
     }
 }
 
-fn request_base_url(state: &HttpState, headers: &HeaderMap) -> String {
+fn request_base_url(
+    state: &HttpState,
+    peer: SocketAddr,
+    headers: &HeaderMap,
+) -> Result<String, Response> {
     if let Some(value) = state.oauth.public_base_url() {
-        return value.trim_end_matches('/').to_string();
+        return Ok(value.trim_end_matches('/').to_string());
     }
 
-    let scheme = optional_header(headers, "x-forwarded-proto").unwrap_or("http");
-    let host = optional_header(headers, "x-forwarded-host")
-        .or_else(|| optional_header(headers, HOST.as_str()))
-        .unwrap_or("127.0.0.1:8765");
+    let base = infer_request_origin(peer, headers)
+        .map_err(|reason| {
+            warn!(reason, "OAuth public origin could not be inferred");
+            plain_response(StatusCode::BAD_REQUEST, format!("OAuth origin: {reason}"))
+        })?;
+    debug!(origin = %base, "inferred OAuth public origin from request");
+    Ok(base)
+}
 
-    format!("{scheme}://{host}")
-        .trim_end_matches('/')
-        .to_string()
+/// In automatic mode the public origin is scoped to the current request.
+/// The ingress proxy must enforce the publicly routed Host. Forwarded
+/// metadata is used only from local peers, never from arbitrary remote peers.
+fn infer_request_origin(peer: SocketAddr, headers: &HeaderMap) -> Result<String, &'static str> {
+    let host_header = optional_header(headers, HOST.as_str())
+        .ok_or("Host header is required when public_base_url is not configured")?;
+    let host = parse_origin_host(host_header)?;
+    let initial_loopback = origin_is_loopback(&host);
+
+    let forwarded_host = if peer.ip().is_loopback() {
+        optional_header(headers, "x-forwarded-host")
+    } else {
+        None
+    };
+    let host = if initial_loopback {
+        match forwarded_host {
+            Some(value) => parse_origin_host(value)?,
+            None => host,
+        }
+    } else {
+        // Prefer the HTTP Host when it already contains the public authority.
+        // A forwarded host never overrides a non-local authority.
+        host
+    };
+
+    let local = origin_is_loopback(&host);
+    let forwarded_proto = if peer.ip().is_loopback() {
+        optional_header(headers, "x-forwarded-proto")
+    } else {
+        None
+    };
+
+    let scheme = match forwarded_proto {
+        Some("https") => "https",
+        Some("http") if local => "http",
+        Some("http") => return Err("public OAuth endpoints require HTTPS"),
+        Some(_) => return Err("unsupported X-Forwarded-Proto value"),
+        None if local => "http",
+        // HTTPS-terminating tunnels commonly preserve the public Host but
+        // do not always provide a forwarded scheme. Avoid emitting a broken
+        // http:// URL for a public authority in that case.
+        None if peer.ip().is_loopback() => "https",
+        None => return Err("public OAuth endpoints require HTTPS; configure a trusted proxy"),
+    };
+
+    Ok(format!("{scheme}://{host}"))
+}
+
+/// Require an authority only: no scheme, path, userinfo, whitespace, lists,
+/// or other values that could poison the discovery URLs and JWT audience.
+fn parse_origin_host(raw: &str) -> Result<String, &'static str> {
+    if raw.is_empty()
+        || raw.contains(|c: char| c.is_whitespace() || c.is_control())
+        || raw.contains(['@', '/', '\\', '?', '#', ','])
+    {
+        return Err("invalid Host authority");
+    }
+
+    let url = Url::parse(&format!("http://{raw}")).map_err(|_| "invalid Host authority")?;
+    if url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("invalid Host authority");
+    }
+
+    Ok(raw.to_ascii_lowercase())
+}
+
+fn origin_is_loopback(authority: &str) -> bool {
+    let Ok(url) = Url::parse(&format!("http://{authority}")) else {
+        return false;
+    };
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+    })
 }
 
 fn is_direct_localhost_request(peer: SocketAddr, headers: &HeaderMap) -> bool {
@@ -904,7 +1018,7 @@ mod tests {
 
     #[test]
     fn accepts_missing_origin_for_non_browser_clients() {
-        assert!(validate_origin(&state(), &HeaderMap::new()).is_ok());
+        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &HeaderMap::new()).is_ok());
     }
 
     #[test]
@@ -912,7 +1026,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("https://example.com"));
 
-        assert!(validate_origin(&state(), &headers).is_err());
+        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &headers).is_err());
     }
 
     #[test]
@@ -920,7 +1034,71 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("http://localhost:8765"));
 
-        assert!(validate_origin(&state(), &headers).is_ok());
+        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &headers).is_ok());
+    }
+
+    #[test]
+    fn infers_ngrok_public_origin_without_config() {
+        let peer = "127.0.0.1:42833".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(HOST, HeaderValue::from_static("quality-femur-booting.ngrok-free.dev"));
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+
+        let origin = infer_request_origin(peer, &headers).unwrap();
+        assert_eq!(origin, "https://quality-femur-booting.ngrok-free.dev");
+        assert!(validate_origin(
+            &state(),
+            peer,
+            &headers_with_origin(&headers, &origin),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn infers_https_from_public_host_when_local_tunnel_omits_forwarded_proto() {
+        let peer = "127.0.0.1:42833".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(HOST, HeaderValue::from_static("some-tunnel.ngrok-free.dev"));
+        assert_eq!(
+            infer_request_origin(peer, &headers).unwrap(),
+            "https://some-tunnel.ngrok-free.dev"
+        );
+    }
+
+    #[test]
+    fn supports_local_development_and_rewritten_proxy_host() {
+        let peer = "127.0.0.1:42833".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(HOST, HeaderValue::from_static("127.0.0.1:8765"));
+        assert_eq!(infer_request_origin(peer, &headers).unwrap(), "http://127.0.0.1:8765");
+
+        headers.insert("x-forwarded-host", HeaderValue::from_static("dynamic.example.com"));
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+        assert_eq!(
+            infer_request_origin(peer, &headers).unwrap(),
+            "https://dynamic.example.com"
+        );
+    }
+
+    #[test]
+    fn rejects_host_poisoning_and_insecure_public_origin() {
+        let peer = "127.0.0.1:42833".parse().unwrap();
+        for host in ["evil.com/path", "evil.com@localhost", "evil.com,other.com", "evil.com\\r\\nInjected"] {
+            let mut headers = HeaderMap::new();
+            headers.insert(HOST, HeaderValue::from_str(host).unwrap_or(HeaderValue::from_static("bad/host")));
+            assert!(infer_request_origin(peer, &headers).is_err(), "{host}");
+        }
+
+        let mut headers = HeaderMap::new();
+        headers.insert(HOST, HeaderValue::from_static("dynamic.example.com"));
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("http"));
+        assert!(infer_request_origin(peer, &headers).is_err());
+    }
+
+    fn headers_with_origin(headers: &HeaderMap, origin: &str) -> HeaderMap {
+        let mut headers = headers.clone();
+        headers.insert(ORIGIN, HeaderValue::from_str(origin).unwrap());
+        headers
     }
 
     #[test]
