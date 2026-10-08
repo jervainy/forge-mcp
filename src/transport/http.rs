@@ -752,7 +752,9 @@ fn infer_request_origin(peer: SocketAddr, headers: &HeaderMap) -> Result<String,
 fn parse_origin_host(raw: &str) -> Result<String, &'static str> {
     if raw.is_empty()
         || raw.contains(|c: char| c.is_whitespace() || c.is_control())
-        || raw.chars().any(|c| matches!(c, '@' | '/' | '\\' | '?' | '#' | ','))
+        || raw
+            .chars()
+            .any(|c| matches!(c, '@' | '/' | '\\' | '?' | '#' | ','))
     {
         return Err("invalid Host authority");
     }
@@ -1021,12 +1023,14 @@ mod tests {
 
     #[test]
     fn accepts_missing_origin_for_non_browser_clients() {
-        assert!(validate_origin(
-            &state(),
-            "127.0.0.1:10000".parse().unwrap(),
-            &HeaderMap::new()
-        )
-        .is_ok());
+        assert!(
+            validate_origin(
+                &state(),
+                "127.0.0.1:10000".parse().unwrap(),
+                &HeaderMap::new()
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -1034,12 +1038,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("https://example.com"));
 
-        assert!(validate_origin(
-            &state(),
-            "127.0.0.1:10000".parse().unwrap(),
-            &headers
-        )
-        .is_err());
+        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &headers).is_err());
     }
 
     #[test]
@@ -1047,29 +1046,22 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("http://localhost:8765"));
 
-        assert!(validate_origin(
-            &state(),
-            "127.0.0.1:10000".parse().unwrap(),
-            &headers
-        )
-        .is_ok());
+        assert!(validate_origin(&state(), "127.0.0.1:10000".parse().unwrap(), &headers).is_ok());
     }
 
     #[test]
     fn infers_ngrok_public_origin_without_config() {
         let peer = "127.0.0.1:42833".parse().unwrap();
         let mut headers = HeaderMap::new();
-        headers.insert(HOST, HeaderValue::from_static("quality-femur-booting.ngrok-free.dev"));
+        headers.insert(
+            HOST,
+            HeaderValue::from_static("quality-femur-booting.ngrok-free.dev"),
+        );
         headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
 
         let origin = infer_request_origin(peer, &headers).unwrap();
         assert_eq!(origin, "https://quality-femur-booting.ngrok-free.dev");
-        assert!(validate_origin(
-            &state(),
-            peer,
-            &headers_with_origin(&headers, &origin),
-        )
-        .is_ok());
+        assert!(validate_origin(&state(), peer, &headers_with_origin(&headers, &origin),).is_ok());
     }
 
     #[test]
@@ -1088,9 +1080,15 @@ mod tests {
         let peer = "127.0.0.1:42833".parse().unwrap();
         let mut headers = HeaderMap::new();
         headers.insert(HOST, HeaderValue::from_static("127.0.0.1:8765"));
-        assert_eq!(infer_request_origin(peer, &headers).unwrap(), "http://127.0.0.1:8765");
+        assert_eq!(
+            infer_request_origin(peer, &headers).unwrap(),
+            "http://127.0.0.1:8765"
+        );
 
-        headers.insert("x-forwarded-host", HeaderValue::from_static("dynamic.example.com"));
+        headers.insert(
+            "x-forwarded-host",
+            HeaderValue::from_static("dynamic.example.com"),
+        );
         headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
         assert_eq!(
             infer_request_origin(peer, &headers).unwrap(),
@@ -1101,9 +1099,17 @@ mod tests {
     #[test]
     fn rejects_host_poisoning_and_insecure_public_origin() {
         let peer = "127.0.0.1:42833".parse().unwrap();
-        for host in ["evil.com/path", "evil.com@localhost", "evil.com,other.com", "evil.com\\r\\nInjected"] {
+        for host in [
+            "evil.com/path",
+            "evil.com@localhost",
+            "evil.com,other.com",
+            "evil.com\\r\\nInjected",
+        ] {
             let mut headers = HeaderMap::new();
-            headers.insert(HOST, HeaderValue::from_str(host).unwrap_or(HeaderValue::from_static("bad/host")));
+            headers.insert(
+                HOST,
+                HeaderValue::from_str(host).unwrap_or(HeaderValue::from_static("bad/host")),
+            );
             assert!(infer_request_origin(peer, &headers).is_err(), "{host}");
         }
 
