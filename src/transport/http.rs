@@ -10,7 +10,7 @@ use axum::{
     extract::{ConnectInfo, Query, State, rejection::JsonRejection},
     http::{
         HeaderMap, HeaderValue, StatusCode,
-        header::{ACCEPT, ALLOW, AUTHORIZATION, CONTENT_TYPE, HOST, LOCATION, ORIGIN},
+        header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HOST, LOCATION, ORIGIN},
     },
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -1141,6 +1141,116 @@ mod tests {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             allowed_origins: Arc::new(allowed_origins("127.0.0.1", 8765)),
         }
+    }
+
+    #[tokio::test]
+    async fn http_tool_call_streams_progress_and_final_response() {
+        let state = state();
+        let peer: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(HOST, HeaderValue::from_static("127.0.0.1:8765"));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/json, text/event-stream"),
+        );
+
+        let initialize = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": { "name": "sse-test", "version": "0.1.0" }
+            }
+        });
+        let response = post_mcp(
+            State(state.clone()),
+            ConnectInfo(peer),
+            headers.clone(),
+            Bytes::from(initialize.to_string()),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let id = response
+            .headers()
+            .get(SESSION_HEADER)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        headers.insert(SESSION_HEADER, HeaderValue::from_str(&id).unwrap());
+
+        let initialized = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+        let response = post_mcp(
+            State(state.clone()),
+            ConnectInfo(peer),
+            headers.clone(),
+            Bytes::from(initialized.to_string()),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "file_list",
+                "arguments": { "items": [{ "path": ".", "depth": 1 }] },
+                "_meta": { "progressToken": "test-progress" }
+            }
+        });
+        let response = post_mcp(
+            State(state.clone()),
+            ConnectInfo(peer),
+            headers.clone(),
+            Bytes::from(request.to_string()),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE).unwrap(),
+            "text/event-stream"
+        );
+
+        let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        let events = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(events.contains("id: "));
+        assert!(events.contains("notifications/progress"));
+        assert!(events.contains("test-progress"));
+        assert!(events.contains("\\"id\\":2"));
+        assert!(events.contains("\\"result\\":"));
+
+        let mut get_headers = HeaderMap::new();
+        get_headers.insert(HOST, HeaderValue::from_static("127.0.0.1:8765"));
+        get_headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
+        get_headers.insert(SESSION_HEADER, HeaderValue::from_str(&id).unwrap());
+        let get = get_mcp(State(state.clone()), ConnectInfo(peer), get_headers).await;
+        assert_eq!(get.status(), StatusCode::OK);
+        assert_eq!(get.headers().get(CONTENT_TYPE).unwrap(), "text/event-stream");
+    }
+
+    #[tokio::test]
+    async fn get_sse_requires_session_and_event_stream_accept() {
+        let state = state();
+        let peer: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(HOST, HeaderValue::from_static("127.0.0.1:8765"));
+        let response = get_mcp(State(state.clone()), ConnectInfo(peer), headers.clone()).await;
+        assert_eq!(response.status(), StatusCode::NOT_ACCEPTABLE);
+
+        headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
+        let response = get_mcp(State(state), ConnectInfo(peer), headers).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
