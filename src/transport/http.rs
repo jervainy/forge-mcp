@@ -1224,11 +1224,11 @@ mod tests {
             .await
             .unwrap();
         let events = String::from_utf8(bytes.to_vec()).unwrap();
-        assert!(events.contains("id: "));
+        assert!(events.contains(r#""id":2"#));
         assert!(events.contains("notifications/progress"));
         assert!(events.contains("test-progress"));
-        assert!(events.contains("\\"id\\":2"));
-        assert!(events.contains("\\"result\\":"));
+        assert!(events.contains(r#""id":2"#));
+        assert!(events.contains(r#""result":"#));
 
         let mut get_headers = HeaderMap::new();
         get_headers.insert(HOST, HeaderValue::from_static("127.0.0.1:8765"));
