@@ -229,15 +229,20 @@ impl OAuthService {
             validate_redirect_uri(redirect_uri)?;
         }
 
-        if request
-            .grant_types
-            .as_ref()
-            .is_some_and(|values| values.iter().any(|value| value != "authorization_code"))
-        {
-            return Err(OAuthError::bad_request(
-                "invalid_client_metadata",
-                "Only grant_types=[authorization_code] is supported",
-            ));
+        if let Some(grants) = request.grant_types.as_ref() {
+            // Some MCP clients request refresh_token as an optional grant during DCR.
+            // We do not support it; return only authorization_code in the
+            // registration response, rather than claiming refresh-token support.
+            if !grants.iter().any(|grant| grant == "authorization_code")
+                || grants
+                    .iter()
+                    .any(|grant| grant != "authorization_code" && grant != "refresh_token")
+            {
+                return Err(OAuthError::bad_request(
+                    "invalid_client_metadata",
+                    "Supported grant type is authorization_code (refresh_token is not registered)",
+                ));
+            }
         }
 
         if request
@@ -740,6 +745,49 @@ mod tests {
             state_dir: dir,
         };
         OAuthService::new(config).unwrap()
+    }
+
+    #[test]
+    fn registration_filters_optional_refresh_token_grant() {
+        let service = service();
+        let response = service
+            .register(RegistrationRequest {
+                redirect_uris: vec![
+                    "https://chatgpt.com/connector/oauth/example".to_string(),
+                ],
+                client_name: Some("ChatGPT".to_string()),
+                grant_types: Some(vec![
+                    "authorization_code".to_string(),
+                    "refresh_token".to_string(),
+                ]),
+                response_types: Some(vec!["code".to_string()]),
+                token_endpoint_auth_method: Some("none".to_string()),
+            })
+            .unwrap();
+
+        assert_eq!(response.grant_types, vec!["authorization_code"]);
+        assert_eq!(response.token_endpoint_auth_method, "none");
+    }
+
+    #[test]
+    fn registration_rejects_unsupported_grants() {
+        let service = service();
+
+        for grants in [
+            vec!["refresh_token".to_string()],
+            vec!["authorization_code".to_string(), "password".to_string()],
+        ] {
+            let result = service.register(RegistrationRequest {
+                redirect_uris: vec![
+                    "https://chatgpt.com/connector/oauth/example".to_string(),
+                ],
+                client_name: None,
+                grant_types: Some(grants),
+                response_types: None,
+                token_endpoint_auth_method: None,
+            });
+            assert!(result.is_err());
+        }
     }
 
     #[test]
