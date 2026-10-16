@@ -10,7 +10,7 @@ use axum::{
     extract::{ConnectInfo, Query, State, rejection::JsonRejection},
     http::{
         HeaderMap, HeaderValue, StatusCode,
-        header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HOST, LOCATION, ORIGIN},
+        header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, HOST, LOCATION, ORIGIN},
     },
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -39,6 +39,12 @@ use crate::{
 
 const SESSION_HEADER: &str = "mcp-session-id";
 const PROTOCOL_VERSION_HEADER: &str = "mcp-protocol-version";
+
+/// Brand mark (navy background, orange flame in braces) embedded at compile time and
+/// served to the browser: `/logo.png` for the OAuth consent card, `/favicon.png` and
+/// `/favicon.ico` for the tab icon.
+const BRAND_MARK_PNG: &[u8] = include_bytes!("../../assets/logo-128.png");
+const FAVICON_PNG: &[u8] = include_bytes!("../../assets/favicon-32.png");
 
 type Session = Arc<SessionEntry>;
 
@@ -71,6 +77,9 @@ pub async fn serve(app: ForgeMcp, host: &str, port: u16) -> anyhow::Result<()> {
 
     let router = Router::new()
         .route("/health", get(health))
+        .route("/favicon.ico", get(favicon))
+        .route("/favicon.png", get(favicon))
+        .route("/logo.png", get(brand_mark))
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
         .route(
             "/.well-known/oauth-protected-resource",
@@ -111,6 +120,29 @@ async fn health() -> Response {
         Json(json!({
             "status": "ok"
         })),
+    )
+        .into_response()
+}
+
+async fn favicon() -> Response {
+    png_response(FAVICON_PNG)
+}
+
+async fn brand_mark() -> Response {
+    png_response(BRAND_MARK_PNG)
+}
+
+fn png_response(body: &'static [u8]) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (CONTENT_TYPE, HeaderValue::from_static("image/png")),
+            (
+                CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=86400, immutable"),
+            ),
+        ],
+        body,
     )
         .into_response()
 }
@@ -1007,7 +1039,7 @@ fn authorization_page(
     .join("");
 
     let html = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Authorize ForgeMCP</title><style>body{{font-family:system-ui,sans-serif;max-width:680px;margin:48px auto;padding:0 20px;color:#1f2937}}.card{{border:1px solid #d1d5db;border-radius:14px;padding:28px}}h1{{margin-top:0}}li{{margin:12px 0}}span{{color:#4b5563}}label{{display:block;margin:24px 0 8px}}input[type=password]{{box-sizing:border-box;width:100%;padding:12px;border:1px solid #9ca3af;border-radius:8px}}button{{margin-top:18px;padding:12px 18px;border:0;border-radius:8px;background:#111827;color:white;font-weight:600}}.error{{background:#fef2f2;color:#991b1b;padding:12px;border-radius:8px;margin-bottom:18px}}</style></head><body><div class=\"card\"><h1>Authorize ForgeMCP</h1>{error_html}<p><strong>{}</strong> is requesting access to this ForgeMCP server.</p><ul>{permissions}</ul><form method=\"post\" action=\"/oauth/authorize\">{hidden}<label for=\"pin\">Admin PIN</label><input id=\"pin\" type=\"password\" name=\"pin\" autocomplete=\"current-password\" placeholder=\"Enter FORGE_MCP_OAUTH_ADMIN_PIN\"><button type=\"submit\">Approve</button></form><p><small>Only approve this request if you initiated it from a trusted MCP client.</small></p></div></body></html>",
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Authorize ForgeMCP</title><link rel=\"icon\" type=\"image/png\" href=\"/favicon.png\"><style>body{{font-family:system-ui,sans-serif;max-width:680px;margin:48px auto;padding:0 20px;color:#1f2937}}.card{{border:1px solid #d1d5db;border-top:4px solid #f97316;border-radius:14px;padding:28px}}img.mark{{display:block;width:64px;height:64px;border-radius:12px;margin-bottom:16px}}h1{{margin-top:0}}li{{margin:12px 0}}span{{color:#4b5563}}label{{display:block;margin:24px 0 8px}}input[type=password]{{box-sizing:border-box;width:100%;padding:12px;border:1px solid #9ca3af;border-radius:8px}}button{{margin-top:18px;padding:12px 18px;border:0;border-radius:8px;background:#011e4a;color:white;font-weight:600}}.error{{background:#fef2f2;color:#991b1b;padding:12px;border-radius:8px;margin-bottom:18px}}</style></head><body><div class=\"card\"><img class=\"mark\" src=\"/logo.png\" alt=\"ForgeMCP\"><h1>Authorize ForgeMCP</h1>{error_html}<p><strong>{}</strong> is requesting access to this ForgeMCP server.</p><ul>{permissions}</ul><form method=\"post\" action=\"/oauth/authorize\">{hidden}<label for=\"pin\">Admin PIN</label><input id=\"pin\" type=\"password\" name=\"pin\" autocomplete=\"current-password\" placeholder=\"Enter FORGE_MCP_OAUTH_ADMIN_PIN\"><button type=\"submit\">Approve</button></form><p><small>Only approve this request if you initiated it from a trusted MCP client.</small></p></div></body></html>",
         html_escape(client_name)
     );
 
@@ -1260,6 +1292,28 @@ mod tests {
     async fn health_check_returns_ok() {
         let response = health().await;
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn brand_mark_is_served_as_png() {
+        for response in [favicon().await, brand_mark().await] {
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response.headers().get(CONTENT_TYPE).unwrap(),
+                HeaderValue::from_static("image/png")
+            );
+            assert!(
+                response
+                    .headers()
+                    .get(CACHE_CONTROL)
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .contains("max-age=")
+            );
+        }
+        assert!(BRAND_MARK_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(FAVICON_PNG.starts_with(b"\x89PNG\r\n\x1a\n"));
     }
 
     #[test]

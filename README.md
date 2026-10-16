@@ -1,4 +1,18 @@
-# ForgeMCP
+<p align="center">
+  <img src="assets/logo-256.png" alt="ForgeMCP logo" width="160">
+</p>
+
+<h1 align="center">ForgeMCP</h1>
+
+<p align="center">
+  <em>A from-scratch, workspace-scoped MCP server for shell and file operations.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jervainy/forge-mcp/actions/workflows/ci.yml"><img src="https://github.com/jervainy/forge-mcp/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
+  <img src="https://img.shields.io/badge/MCP-2025--11--25-orange" alt="MCP protocol revision">
+</p>
 
 ForgeMCP is both a practical workspace-scoped MCP server and a learning project that implements MCP from the protocol layer upward.
 
